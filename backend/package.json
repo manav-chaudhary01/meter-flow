@@ -1,0 +1,14 @@
+{
+  "name": "meterflow-backend",
+  "version": "1.0.0",
+  "description": "MeterFlow backend API",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "dev": "nodemon src/server.js",
+    "start": "node src/server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}
