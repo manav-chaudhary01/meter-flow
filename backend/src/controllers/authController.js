@@ -78,3 +78,86 @@ export async function register(req, res) {
     });
   }
 }
+
+export async function login(req, res) {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: "Email and password are required"
+      });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+
+    const user = await User.findOne({
+      email: normalizedEmail
+    });
+
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid email or password"
+      });
+    }
+
+    const passwordMatches = await bcrypt.compare(
+      password,
+      user.passwordHash
+    );
+
+    if (!passwordMatches) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid email or password"
+      });
+    }
+
+    const tenant = await Tenant.findById(user.tenantId);
+
+    if (!tenant) {
+      return res.status(500).json({
+        success: false,
+        message: "Associated organization not found"
+      });
+    }
+
+    const token = jwt.sign(
+      {
+        userId: user._id.toString(),
+        tenantId: user.tenantId.toString()
+      },
+      process.env.JWT_SECRET,
+      {
+        expiresIn: "1d"
+      }
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Login successful",
+      data: {
+        token,
+        user: {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          tenantId: user.tenantId
+        },
+        tenant: {
+          id: tenant._id,
+          name: tenant.name
+        }
+      }
+    });
+  } catch (error) {
+    console.error("Login error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Login failed"
+    });
+  }
+}
