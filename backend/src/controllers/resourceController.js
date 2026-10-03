@@ -11,17 +11,28 @@ export async function createResource(req, res) {
       });
     }
 
-    if (Number(price) < 0) {
+    const normalizedName = name.trim();
+    const normalizedUnit = unit.trim();
+    const priceNumber = Number(price);
+
+    if (!normalizedName || !normalizedUnit) {
       return res.status(400).json({
         success: false,
-        message: "Price cannot be negative"
+        message: "Name and unit cannot be empty"
+      });
+    }
+
+    if (!Number.isFinite(priceNumber) || priceNumber < 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Price must be a valid non-negative number"
       });
     }
 
     const resource = await Resource.create({
       tenantId: req.user.tenantId,
-      name: name.trim(),
-      unit: unit.trim(),
+      name: normalizedName,
+      unit: normalizedUnit,
       price
     });
 
