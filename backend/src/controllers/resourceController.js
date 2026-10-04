@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import Resource from "../models/Resource.js";
 
 export async function createResource(req, res) {
@@ -71,6 +72,45 @@ export async function getResources(req, res) {
     return res.status(500).json({
       success: false,
       message: "Failed to fetch resources"
+    });
+  }
+}
+
+export async function getResourceById(req, res) {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid resource ID"
+      });
+    }
+
+    const resource = await Resource.findOne({
+      _id: id,
+      tenantId: req.user.tenantId
+    });
+
+    if (!resource) {
+      return res.status(404).json({
+        success: false,
+        message: "Resource not found"
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        resource
+      }
+    });
+  } catch (error) {
+    console.error("Get resource by ID error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch resource"
     });
   }
 }
