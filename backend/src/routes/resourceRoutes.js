@@ -2,7 +2,8 @@ import express from "express";
 import {
   createResource,
   getResources,
-  getResourceById
+  getResourceById,
+  updateResource
 } from "../controllers/resourceController.js";
 import { authenticateToken } from "../middleware/authMiddleware.js";
 
@@ -13,5 +14,6 @@ router.use(authenticateToken);
 router.post("/", createResource);
 router.get("/", getResources);
 router.get("/:id", getResourceById);
+router.put("/:id", updateResource);
 
 export default router;
