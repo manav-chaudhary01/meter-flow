@@ -3,7 +3,8 @@ import {
   createResource,
   getResources,
   getResourceById,
-  updateResource
+  updateResource,
+  deleteResource
 } from "../controllers/resourceController.js";
 import { authenticateToken } from "../middleware/authMiddleware.js";
 
@@ -15,5 +16,6 @@ router.post("/", createResource);
 router.get("/", getResources);
 router.get("/:id", getResourceById);
 router.put("/:id", updateResource);
+router.delete("/:id", deleteResource);
 
 export default router;

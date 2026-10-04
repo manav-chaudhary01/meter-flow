@@ -191,3 +191,40 @@ export async function updateResource(req, res) {
     });
   }
 }
+
+export async function deleteResource(req, res) {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid resource ID"
+      });
+    }
+
+    const resource = await Resource.findOneAndDelete({
+      _id: id,
+      tenantId: req.user.tenantId
+    });
+
+    if (!resource) {
+      return res.status(404).json({
+        success: false,
+        message: "Resource not found"
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Resource deleted successfully"
+    });
+  } catch (error) {
+    console.error("Delete resource error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to delete resource"
+    });
+  }
+}
