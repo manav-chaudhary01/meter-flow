@@ -163,7 +163,7 @@ export async function updateResource(req, res) {
         price
       },
       {
-        new: true,
+        returnDocument: "after",
         runValidators: true
       }
     );

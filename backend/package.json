@@ -6,7 +6,9 @@
   "main": "src/server.js",
   "scripts": {
     "dev": "nodemon src/server.js",
-    "start": "node src/server.js"
+    "start": "node src/server.js",
+    "test": "node --test --test-concurrency=1",
+    "migrate:workspaces": "node -e \"import('./src/config/database.js').then(async m => { await m.connectDatabase(); const { backfillWorkspaces } = await import('./src/utils/migrateWorkspaces.js'); const s = await backfillWorkspaces(); console.log('Migration complete:', s); process.exit(0); });\""
   },
   "keywords": [],
   "author": "",
@@ -23,6 +25,8 @@
     "mongoose": "^9.10.2"
   },
   "devDependencies": {
-    "nodemon": "^3.1.14"
+    "mongodb-memory-server": "^11.3.0",
+    "nodemon": "^3.1.14",
+    "supertest": "^7.3.1"
   }
 }
