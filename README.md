@@ -41,7 +41,7 @@ meter-flow/
 │   │   ├── routes/              # Express API route modules
 │   │   ├── services/            # Pure calculation & evaluation engines (billingCalculator, spendCalculator, spendForecaster, alertEvaluator)
 │   │   └── utils/               # Migration & workspace backfill utilities
-│   └── tests/                   # Automated unit & integration test suite (128 tests across 44 suites)
+│   └── tests/                   # Automated unit & integration test suite (140 tests across 45 suites)
 │       ├── helpers/db.js        # In-memory test database runner
 │       ├── health.test.js       # Health check & 404 tests
 │       ├── auth.test.js         # Authentication tests
@@ -51,11 +51,15 @@ meter-flow/
 │       ├── billing.test.js      # Billing calculation, periods, reconciliation & idempotency tests
 │       ├── budgets.test.js      # Budget CRUD, actual spend, threshold alerts & forecasting tests
 │       ├── reliability.test.js  # Milestone F reliability, reconciliation & operational tests
+│       ├── e2eWorkflow.test.js  # Milestone G 15-step end-to-end integration lifecycle tests
 │       ├── resource.test.js     # Resource CRUD tests
 │       ├── tenantIsolation.test.js # Multi-tenant isolation tests
 │       └── migration.test.js    # Idempotent migration verification
 ├── docs/
 │   ├── API.md                   # Complete REST API specification
+│   ├── PROJECT_DEMO.md          # Step-by-step backend demonstration guide & checklist
+│   ├── TEST_PLAN.md             # Master test plan & empirical verification report (140 tests)
+│   ├── PROJECT_REPORT_NOTES.md  # Architecture, data models & university report notes
 │   ├── Meter-Flow-Synopsis.pdf  # Project synopsis document
 │   └── SYNOPSIS.md              # Project synopsis & original proposal
 └── ml/
@@ -103,7 +107,7 @@ npm run migrate:workspaces
 ```powershell
 npm test
 ```
-The test suite executes 128 automated tests across 44 test suites using Node's native test runner (`node:test`) with an isolated in-memory MongoDB instance. No external database connection is required.
+The test suite executes 140 automated tests across 45 test suites using Node's native test runner (`node:test`) with an isolated in-memory MongoDB instance. No external database connection is required.
 
 ---
 
@@ -160,5 +164,4 @@ For full request/response schemas, parameters, and examples, see [docs/API.md](d
 - [x] **Milestone D — Billing Engine**: High-precision Decimal.js calculation, billing period calculation, invoice records, usage reconciliation, idempotency.
 - [x] **Milestone E — Budgets & Analytics**: Budget allocation, spend tracking, threshold alerts, explainable linear burn-rate forecasts.
 - [x] **Milestone F — Reliability, Reconciliation & Production Readiness**: Self-healing billing reconciliation, suspended membership protection, privilege anti-escalation, production error sanitization, operational health reporting, graceful shutdown, environment validation.
-- [ ] **Milestone G — Predictive Spending & Machine Learning**: Python service, scikit-learn forecasting, predictive alerts.
-- [ ] **Milestone H — Hardening & Final Verification**: Seed data, end-to-end flows, deployment guides.
+- [x] **Milestone G — Final Integration, Release Validation & Project Completion**: Full 15-step business workflow integration test suite, explicit line-item usage reconciliation, demonstration checklist (`PROJECT_DEMO.md`), master test plan (`TEST_PLAN.md`), academic report notes (`PROJECT_REPORT_NOTES.md`).
