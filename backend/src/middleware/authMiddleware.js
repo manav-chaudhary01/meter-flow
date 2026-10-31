@@ -20,27 +20,43 @@ export async function authenticateToken(req, res, next) {
       process.env.JWT_SECRET
     );
 
-    // Verify server-side membership in the target workspace
+    // 1. Check for any existing membership record for this user and workspace
     let membership = await Membership.findOne({
       userId: decoded.userId,
-      tenantId: decoded.tenantId,
-      status: "active"
+      tenantId: decoded.tenantId
     });
 
-    // Backward-compatibility auto-heal for legacy accounts created prior to Membership model
+    // If membership exists but is suspended, immediately deny access
+    if (membership && membership.status !== "active") {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied: your workspace membership is suspended or inactive"
+      });
+    }
+
+    // 2. Backward-compatibility auto-heal for unmigrated legacy accounts created prior to Membership model
+    // CRITICAL SECURITY GUARD: Only auto-heal if NO owner membership exists for this workspace.
+    // If the workspace already has an owner, an unauthorized or removed user must NEVER be granted ownership!
     if (!membership) {
       const user = await User.findById(decoded.userId);
       if (user && user.tenantId && user.tenantId.toString() === decoded.tenantId) {
-        membership = await Membership.create({
-          userId: user._id,
-          tenantId: user.tenantId,
-          role: "owner",
-          status: "active"
-        }).catch(() => null);
+        const ownerExists = await Membership.exists({
+          tenantId: decoded.tenantId,
+          role: "owner"
+        });
+
+        if (!ownerExists) {
+          membership = await Membership.create({
+            userId: user._id,
+            tenantId: user.tenantId,
+            role: "owner",
+            status: "active"
+          }).catch(() => null);
+        }
       }
     }
 
-    if (!membership) {
+    if (!membership || membership.status !== "active") {
       return res.status(403).json({
         success: false,
         message: "Access denied: you are not an active member of this workspace"

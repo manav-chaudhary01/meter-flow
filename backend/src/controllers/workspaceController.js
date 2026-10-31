@@ -417,6 +417,17 @@ export async function removeWorkspaceMember(req, res) {
 
     await Membership.findByIdAndDelete(targetMembership._id);
 
+    // If the removed user's active tenant was pointing to this workspace, reset it
+    const removedUser = await User.findById(memberUserId);
+    if (removedUser && removedUser.tenantId && removedUser.tenantId.toString() === workspaceId.toString()) {
+      const fallbackMembership = await Membership.findOne({
+        userId: memberUserId,
+        status: "active"
+      });
+      removedUser.tenantId = fallbackMembership ? fallbackMembership.tenantId : null;
+      await removedUser.save();
+    }
+
     return res.status(200).json({
       success: true,
       message: "Member removed successfully"

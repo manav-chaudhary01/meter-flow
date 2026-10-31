@@ -17,7 +17,7 @@ Authorization: Bearer <your-jwt-token>
 ## 1. System & Health
 
 ### Health Check
-Verify the service is reachable.
+Verify the service is reachable and retrieve operational readiness telemetry.
 
 - **Method:** `GET`
 - **Endpoint:** `/api/health`
@@ -26,9 +26,17 @@ Verify the service is reachable.
 ```json
 {
   "success": true,
-  "message": "MeterFlow API is running"
+  "status": "healthy",
+  "message": "MeterFlow API is running",
+  "database": "connected",
+  "uptime": 124,
+  "timestamp": "2026-10-31T12:00:00.000Z"
 }
 ```
+
+> **Operational Health & Error Handling Policy:**
+> - If the database connection is interrupted, `/api/health` reports `"status": "degraded"` and `"database": "disconnected"`.
+> - When `NODE_ENV=production`, all unhandled 500 exceptions are automatically sanitized to `{"success": false, "message": "Internal server error"}` to prevent leakage of credentials, database URIs, or internal stack traces.
 
 ---
 
@@ -556,9 +564,10 @@ Generate a bill for the active workspace covering a specified date range and cur
   - `billingPeriodStart` must be strictly before `billingPeriodEnd`.
   - `currency`: 3-letter ISO code (e.g. `"USD"`, `"EUR"`), defaults to `"USD"`.
   - Calling user must have `owner` or `admin` role in the active workspace.
-- **Idempotency & Concurrency:**
+- **Idempotency, Concurrency & Self-Healing Reconciliation:**
   - A unique compound index `{ tenantId: 1, billingPeriodStart: 1, billingPeriodEnd: 1, currency: 1 }` prevents duplicate records.
   - Repeated generation for the same period returns HTTP `200 OK` with `isExisting: true`.
+  - Self-healing reconciliation: If a billing run is interrupted before usage record reconciliation finishes, subsequent generation or retrieval (`GET /api/billing/:id/usage`) automatically links eligible unbilled usage records to the existing bill without double-counting.
 - **Success Response (201 Created - New Bill):**
 ```json
 {

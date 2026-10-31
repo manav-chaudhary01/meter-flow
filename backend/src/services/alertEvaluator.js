@@ -64,7 +64,7 @@ export async function evaluateBudgetAlerts({ budget, actualSpend: precomputedSpe
             budgetAmount: budgetAmountDec.toFixed(2),
             currency: budget.currency,
             percentageUsed: Math.round(percentageUsed * 100) / 100,
-            alertType: percentageUsed >= 100 ? "threshold_exceeded" : "threshold_reached",
+            alertType: threshold >= 100 ? "threshold_exceeded" : "threshold_reached",
             status: "active",
             triggeredAt: new Date()
           });

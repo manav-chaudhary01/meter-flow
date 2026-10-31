@@ -41,7 +41,7 @@ meter-flow/
 │   │   ├── routes/              # Express API route modules
 │   │   ├── services/            # Pure calculation & evaluation engines (billingCalculator, spendCalculator, spendForecaster, alertEvaluator)
 │   │   └── utils/               # Migration & workspace backfill utilities
-│   └── tests/                   # Automated unit & integration test suite (118 tests)
+│   └── tests/                   # Automated unit & integration test suite (128 tests across 44 suites)
 │       ├── helpers/db.js        # In-memory test database runner
 │       ├── health.test.js       # Health check & 404 tests
 │       ├── auth.test.js         # Authentication tests
@@ -50,6 +50,7 @@ meter-flow/
 │       ├── usage.test.js        # Usage ingestion, idempotency & aggregation tests
 │       ├── billing.test.js      # Billing calculation, periods, reconciliation & idempotency tests
 │       ├── budgets.test.js      # Budget CRUD, actual spend, threshold alerts & forecasting tests
+│       ├── reliability.test.js  # Milestone F reliability, reconciliation & operational tests
 │       ├── resource.test.js     # Resource CRUD tests
 │       ├── tenantIsolation.test.js # Multi-tenant isolation tests
 │       └── migration.test.js    # Idempotent migration verification
@@ -102,7 +103,7 @@ npm run migrate:workspaces
 ```powershell
 npm test
 ```
-The test suite executes 118 automated tests across 39 test suites using Node's native test runner (`node:test`) with an isolated in-memory MongoDB instance. No external database connection is required.
+The test suite executes 128 automated tests across 44 test suites using Node's native test runner (`node:test`) with an isolated in-memory MongoDB instance. No external database connection is required.
 
 ---
 
@@ -158,5 +159,6 @@ For full request/response schemas, parameters, and examples, see [docs/API.md](d
 - [x] **Milestone C — Service Catalog & Usage Ingestion**: Tracked service catalog (`metered`, `subscription`, `hybrid`), usage ingestion, database-enforced idempotency, history & aggregation pipelines.
 - [x] **Milestone D — Billing Engine**: High-precision Decimal.js calculation, billing period calculation, invoice records, usage reconciliation, idempotency.
 - [x] **Milestone E — Budgets & Analytics**: Budget allocation, spend tracking, threshold alerts, explainable linear burn-rate forecasts.
-- [ ] **Milestone F — Predictive Spending**: Python service, scikit-learn forecasting, predictive alerts.
-- [ ] **Milestone G — Hardening & Final Verification**: Seed data, end-to-end flows, deployment guides.
+- [x] **Milestone F — Reliability, Reconciliation & Production Readiness**: Self-healing billing reconciliation, suspended membership protection, privilege anti-escalation, production error sanitization, operational health reporting, graceful shutdown, environment validation.
+- [ ] **Milestone G — Predictive Spending & Machine Learning**: Python service, scikit-learn forecasting, predictive alerts.
+- [ ] **Milestone H — Hardening & Final Verification**: Seed data, end-to-end flows, deployment guides.
