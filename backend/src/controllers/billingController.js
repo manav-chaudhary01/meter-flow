@@ -4,6 +4,40 @@ import TrackedService from "../models/TrackedService.js";
 import UsageRecord from "../models/UsageRecord.js";
 import { calculateBill } from "../services/billingCalculator.js";
 
+/**
+ * Self-healing helper: reconciles unbilled usage records in the billing period
+ * for services included in the bill. Protects against interrupted runs or race conditions.
+ */
+async function reconcileMissingUsageRecords(billingRecord) {
+  if (!billingRecord || !billingRecord._id) return 0;
+
+  const serviceIds = (billingRecord.lineItems || [])
+    .filter((li) => li.chargeType === "usage" && li.serviceId)
+    .map((li) => li.serviceId);
+
+  if (serviceIds.length === 0) return 0;
+
+  const result = await UsageRecord.updateMany(
+    {
+      tenantId: billingRecord.tenantId,
+      serviceId: { $in: serviceIds },
+      billingRecordId: null,
+      occurredAt: {
+        $gte: billingRecord.billingPeriodStart,
+        $lt: billingRecord.billingPeriodEnd
+      }
+    },
+    {
+      $set: {
+        billingRecordId: billingRecord._id,
+        billedAt: billingRecord.generatedAt || new Date()
+      }
+    }
+  );
+
+  return result.modifiedCount || 0;
+}
+
 function formatBillingRecord(record) {
   if (!record) return null;
   const doc = record.toObject ? record.toObject() : record;
@@ -81,6 +115,9 @@ export async function generateBill(req, res) {
     });
 
     if (existingBill) {
+      // Self-healing: ensure any usage records from an interrupted previous run are linked
+      await reconcileMissingUsageRecords(existingBill);
+
       return res.status(200).json({
         success: true,
         message: "Billing record already exists for this period",
@@ -147,6 +184,9 @@ export async function generateBill(req, res) {
           currency: normalizedCurrency
         });
         if (raceWinner) {
+          // Self-healing: ensure usage records are linked to race winner
+          await reconcileMissingUsageRecords(raceWinner);
+
           return res.status(200).json({
             success: true,
             message: "Billing record already exists for this period",
@@ -317,12 +357,30 @@ export async function getBillingUsage(req, res) {
       });
     }
 
-    const usageRecords = await UsageRecord.find({
+    let usageRecords = await UsageRecord.find({
       tenantId: req.user.tenantId,
       billingRecordId: id
     })
       .sort({ occurredAt: 1 })
       .populate("serviceId", "name unit trackingType currency");
+
+    // Self-healing check: if count is 0 but bill has usage charges, reconcile and query again
+    if (
+      usageRecords.length === 0 &&
+      (record.lineItems || []).some(
+        (li) => li.chargeType === "usage" && (li.usageRecordCount > 0 || (li.quantity && li.quantity !== "0"))
+      )
+    ) {
+      const reconciledCount = await reconcileMissingUsageRecords(record);
+      if (reconciledCount > 0) {
+        usageRecords = await UsageRecord.find({
+          tenantId: req.user.tenantId,
+          billingRecordId: id
+        })
+          .sort({ occurredAt: 1 })
+          .populate("serviceId", "name unit trackingType currency");
+      }
+    }
 
     return res.status(200).json({
       success: true,

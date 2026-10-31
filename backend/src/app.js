@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
+import mongoose from "mongoose";
 import authRoutes from "./routes/authRoutes.js";
 import resourceRoutes from "./routes/resourceRoutes.js";
 import workspaceRoutes from "./routes/workspaceRoutes.js";
@@ -16,9 +17,14 @@ app.use(cors());
 app.use(express.json());
 
 app.get("/api/health", (req, res) => {
+  const isConnected = mongoose.connection && mongoose.connection.readyState === 1;
   res.status(200).json({
     success: true,
-    message: "MeterFlow API is running"
+    status: isConnected ? "healthy" : "degraded",
+    message: "MeterFlow API is running",
+    database: isConnected ? "connected" : "disconnected",
+    uptime: Math.floor(process.uptime()),
+    timestamp: new Date().toISOString()
   });
 });
 
@@ -38,15 +44,23 @@ app.use((req, res) => {
   });
 });
 
-// Centralized error handling middleware
+// Centralized error handling middleware with production sanitization
 // eslint-disable-next-line no-unused-vars
-app.use((err, req, res, next) => {
+export function errorHandler(err, req, res, next) {
   console.error("Unhandled server error:", err);
   const status = err.status || 500;
+  const isProduction = process.env.NODE_ENV === "production";
+  const message =
+    isProduction && status === 500
+      ? "Internal server error"
+      : err.message || "Internal server error";
+
   res.status(status).json({
     success: false,
-    message: err.message || "Internal server error"
+    message
   });
-});
+}
+
+app.use(errorHandler);
 
 export default app;
