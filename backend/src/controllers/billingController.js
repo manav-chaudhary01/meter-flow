@@ -11,6 +11,29 @@ import { calculateBill } from "../services/billingCalculator.js";
 async function reconcileMissingUsageRecords(billingRecord) {
   if (!billingRecord || !billingRecord._id) return 0;
 
+  // 1. Prefer explicit usageRecordIds recorded in the bill's line items
+  const explicitRecordIds = (billingRecord.lineItems || []).flatMap(
+    (li) => li.usageRecordIds || []
+  );
+
+  if (explicitRecordIds.length > 0) {
+    const result = await UsageRecord.updateMany(
+      {
+        _id: { $in: explicitRecordIds },
+        tenantId: billingRecord.tenantId,
+        billingRecordId: null
+      },
+      {
+        $set: {
+          billingRecordId: billingRecord._id,
+          billedAt: billingRecord.generatedAt || new Date()
+        }
+      }
+    );
+    return result.modifiedCount || 0;
+  }
+
+  // 2. Fallback: match by services and period boundaries if no explicit IDs were stored
   const serviceIds = (billingRecord.lineItems || [])
     .filter((li) => li.chargeType === "usage" && li.serviceId)
     .map((li) => li.serviceId);
