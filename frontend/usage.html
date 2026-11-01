@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Usage Ingestion & History — MeterFlow</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <!-- Sidebar Navigation -->
+    <aside id="sidebar" class="sidebar">
+      <div class="sidebar-header">
+        <a href="index.html" class="sidebar-logo">
+          <div class="auth-logo-icon">M</div>
+          <span>MeterFlow</span>
+        </a>
+      </div>
+
+      <nav class="sidebar-nav" aria-label="Main Navigation">
+        <a href="index.html" class="nav-item">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="7" height="7"></rect>
+            <rect x="14" y="3" width="7" height="7"></rect>
+            <rect x="14" y="14" width="7" height="7"></rect>
+            <rect x="3" y="14" width="7" height="7"></rect>
+          </svg>
+          Dashboard
+        </a>
+        <a href="services.html" class="nav-item">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 6h16M4 12h16M4 18h16"></path>
+          </svg>
+          Tracked Services
+        </a>
+        <a href="usage.html" class="nav-item active">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+          </svg>
+          Usage History
+        </a>
+        <a href="billing.html" class="nav-item">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="4" width="20" height="16" rx="2"></rect>
+            <line x1="2" y1="10" x2="22" y2="10"></line>
+          </svg>
+          Invoices & Billing
+        </a>
+        <a href="budgets.html" class="nav-item">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="8" x2="12" y2="12"></line>
+            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+          </svg>
+          Budgets & Alerts
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div>MeterFlow SaaS v1.0.0</div>
+        <div style="font-size: 0.725rem; margin-top: 2px;">Multi-Tenant Metered Billing</div>
+      </div>
+    </aside>
+
+    <!-- Main Wrapper -->
+    <div class="main-wrapper">
+      <!-- App Header -->
+      <header class="app-header">
+        <div class="header-left">
+          <button id="mobile-menu-btn" class="mobile-menu-btn" aria-label="Toggle navigation menu">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="3" y1="12" x2="21" y2="12"></line>
+              <line x1="3" y1="6" x2="21" y2="6"></line>
+              <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
+          </button>
+
+          <div class="workspace-selector-container">
+            <label for="workspace-select" style="font-size: 0.8rem; color: var(--color-text-muted); font-weight: 500;">Workspace:</label>
+            <select id="workspace-select" class="workspace-select" aria-label="Select active workspace">
+              <option value="">Loading workspaces...</option>
+            </select>
+            <span id="workspace-role-badge" class="badge badge-neutral">Owner</span>
+          </div>
+        </div>
+
+        <div class="header-right">
+          <button id="refresh-usage-btn" class="btn btn-secondary btn-sm" aria-label="Refresh usage data">
+            Refresh
+          </button>
+
+          <div class="user-profile-badge">
+            <div id="header-user-avatar" class="user-avatar" aria-hidden="true">U</div>
+            <div class="user-info">
+              <span id="header-user-name" class="user-name">Loading...</span>
+              <span id="header-user-role" class="user-role">...</span>
+            </div>
+          </div>
+
+          <button id="logout-btn" class="btn btn-secondary btn-sm" style="color: var(--color-danger);" aria-label="Sign out of account">
+            Sign Out
+          </button>
+        </div>
+      </header>
+
+      <!-- Usage Content Body -->
+      <main class="content-body">
+        <div class="page-header">
+          <div>
+            <h1>Usage Ingestion &amp; History</h1>
+            <p>Ingest metered telemetry events, test idempotency, and audit historical consumption.</p>
+          </div>
+          <div>
+            <button id="open-ingest-modal-btn" class="btn btn-primary" aria-label="Ingest new usage event">
+              + Ingest Usage Event
+            </button>
+          </div>
+        </div>
+
+        <div id="usage-error-banner" class="alert alert-error" style="display: none;" role="alert"></div>
+        <div id="usage-success-banner" class="alert alert-success" style="display: none;" role="status"></div>
+        <div id="usage-info-banner" class="alert alert-info" style="display: none;" role="status"></div>
+
+        <!-- Metric KPI Cards -->
+        <section class="metric-grid" aria-label="Usage Summary Metrics">
+          <div class="metric-card">
+            <div class="metric-title">Recorded Events</div>
+            <div id="metric-total-events" class="metric-value">--</div>
+            <div class="metric-subtitle">Total consumption records in workspace</div>
+          </div>
+
+          <div class="metric-card">
+            <div class="metric-title">Aggregated Volume</div>
+            <div id="metric-aggregate-volume" class="metric-value">--</div>
+            <div class="metric-subtitle">Sum of quantities across filtered period</div>
+          </div>
+
+          <div class="metric-card">
+            <div class="metric-title">Ingestion Services</div>
+            <div id="metric-distinct-services" class="metric-value">--</div>
+            <div class="metric-subtitle">Active billable services receiving events</div>
+          </div>
+        </section>
+
+        <!-- Filter Bar -->
+        <div class="filter-bar">
+          <div class="filter-group">
+            <label for="filter-service" class="filter-label">Service:</label>
+            <select id="filter-service" class="filter-select">
+              <option value="">All Services</option>
+            </select>
+          </div>
+
+          <div class="filter-group">
+            <label for="filter-start-date" class="filter-label">From:</label>
+            <input type="date" id="filter-start-date" class="filter-input">
+          </div>
+
+          <div class="filter-group">
+            <label for="filter-end-date" class="filter-label">To:</label>
+            <input type="date" id="filter-end-date" class="filter-input">
+          </div>
+
+          <button id="apply-filters-btn" class="btn btn-secondary btn-sm">Filter</button>
+          <button id="reset-filters-btn" class="btn btn-secondary btn-sm">Reset</button>
+        </div>
+
+        <!-- Usage Records Table Section -->
+        <section class="section-card" aria-labelledby="usage-history-heading">
+          <div class="section-card-header">
+            <h2 id="usage-history-heading">Usage Audit Log</h2>
+            <span id="usage-count-badge" class="badge badge-neutral">0 Events</span>
+          </div>
+
+          <div class="section-card-body" style="padding: 0;">
+            <div class="table-responsive">
+              <table class="data-table" aria-label="Historical Usage Records">
+                <thead>
+                  <tr>
+                    <th scope="col">Timestamp</th>
+                    <th scope="col">Service</th>
+                    <th scope="col">Quantity</th>
+                    <th scope="col">Unit</th>
+                    <th scope="col">Source</th>
+                    <th scope="col">Idempotency Key</th>
+                    <th scope="col">Billing Status</th>
+                    <th scope="col" style="text-align: right;">Details</th>
+                  </tr>
+                </thead>
+                <tbody id="usage-table-body">
+                  <tr>
+                    <td colspan="8" style="text-align: center; color: var(--color-text-muted); padding: 2rem;">Loading usage records...</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Empty State -->
+            <div id="usage-empty" class="empty-state" style="display: none;">
+              <div class="empty-state-icon">📊</div>
+              <div class="empty-state-title">No Usage Records Ingested</div>
+              <div class="empty-state-desc">Use the "Ingest Usage Event" button or your API client to submit metered consumption data.</div>
+            </div>
+
+            <!-- Pagination Bar -->
+            <div id="usage-pagination" class="pagination-bar" style="display: none;">
+              <div id="pagination-info" class="pagination-info">Showing page 1 of 1</div>
+              <div class="pagination-actions">
+                <button id="prev-page-btn" class="btn btn-secondary btn-sm" disabled>&larr; Previous</button>
+                <button id="next-page-btn" class="btn btn-secondary btn-sm" disabled>Next &rarr;</button>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <!-- Ingest Usage Modal -->
+  <div id="ingest-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="ingest-modal-title">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 id="ingest-modal-title">Ingest Usage Event</h3>
+        <button type="button" class="modal-close-btn" data-close-modal="ingest-modal" aria-label="Close dialog">&times;</button>
+      </div>
+      <form id="ingest-usage-form">
+        <div class="modal-body">
+          <div id="ingest-modal-error" class="alert alert-error" style="display: none;" role="alert"></div>
+          <div id="ingest-modal-replay" class="alert alert-info" style="display: none;" role="status"></div>
+
+          <div class="form-group">
+            <label for="ingest-service" class="form-label">Tracked Service *</label>
+            <select id="ingest-service" class="form-select" required>
+              <option value="">Select a metered/hybrid service...</option>
+            </select>
+            <span id="service-unit-hint" class="form-hint">Unit will be matched automatically.</span>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="ingest-quantity" class="form-label">Quantity *</label>
+              <input type="number" id="ingest-quantity" class="form-input" required min="0" step="any" placeholder="e.g. 150">
+            </div>
+            <div class="form-group">
+              <label for="ingest-unit" class="form-label">Unit *</label>
+              <input type="text" id="ingest-unit" class="form-input" required placeholder="e.g. requests" readonly style="background-color: var(--color-bg-body);">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="ingest-occurred-at" class="form-label">Occurred At</label>
+              <input type="datetime-local" id="ingest-occurred-at" class="form-input">
+              <span class="form-hint">Leave blank for current server time</span>
+            </div>
+            <div class="form-group">
+              <label for="ingest-source" class="form-label">Source</label>
+              <input type="text" id="ingest-source" class="form-input" value="manual-ui" maxlength="100">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <div style="display: flex; justify-content: space-between; align-items: baseline;">
+              <label for="ingest-idempotency-key" class="form-label">Idempotency Key</label>
+              <button type="button" id="generate-key-btn" class="btn btn-secondary btn-sm" style="font-size: 0.75rem; padding: 0.2rem 0.5rem;">
+                Generate Key
+              </button>
+            </div>
+            <input type="text" id="ingest-idempotency-key" class="form-input" placeholder="e.g. evt-20261101-9f82a1" maxlength="200">
+            <span class="form-hint">Ensures duplicate API calls with identical payloads do not double-count usage.</span>
+          </div>
+
+          <div class="form-group">
+            <label for="ingest-external-event-id" class="form-label">External Event ID</label>
+            <input type="text" id="ingest-external-event-id" class="form-input" placeholder="Optional 3rd-party provider event ID" maxlength="200">
+          </div>
+
+          <div class="form-group">
+            <label for="ingest-metadata" class="form-label">Metadata (JSON Object)</label>
+            <textarea id="ingest-metadata" class="form-input" rows="2" placeholder='{"endpoint": "/v1/chat", "model": "gemini-pro"}' style="font-family: var(--font-mono); font-size: 0.8rem;"></textarea>
+            <span id="metadata-error" class="form-hint" style="color: var(--color-danger); display: none;">Invalid JSON object.</span>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-close-modal="ingest-modal">Cancel</button>
+          <button type="submit" id="ingest-submit-btn" class="btn btn-primary">Submit Usage</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Metadata Inspector Modal -->
+  <div id="metadata-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="metadata-modal-title">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 id="metadata-modal-title">Usage Event Metadata</h3>
+        <button type="button" class="modal-close-btn" data-close-modal="metadata-modal" aria-label="Close dialog">&times;</button>
+      </div>
+      <div class="modal-body">
+        <pre id="metadata-content" style="background: var(--color-bg-body); padding: var(--space-md); border-radius: var(--radius-md); font-family: var(--font-mono); font-size: 0.825rem; overflow-x: auto; border: 1px solid var(--color-border);"></pre>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-close-modal="metadata-modal">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/usage.js"></script>
+</body>
+</html>

@@ -56,6 +56,63 @@ describe("Frontend Static Serving & Security Boundaries", () => {
     assert.match(res.text, /initDashboard/);
   });
 
+  it("GET /services should serve services.html with 200 OK", async () => {
+    const res = await request(app).get("/services");
+    assert.equal(res.status, 200);
+    assert.match(res.headers["content-type"], /text\/html/);
+    assert.match(res.text, /Tracked Services — MeterFlow/);
+    assert.match(res.text, /id="services-table-body"/);
+    assert.match(res.text, /id="create-service-form"/);
+  });
+
+  it("GET /usage should serve usage.html with 200 OK", async () => {
+    const res = await request(app).get("/usage");
+    assert.equal(res.status, 200);
+    assert.match(res.headers["content-type"], /text\/html/);
+    assert.match(res.text, /Usage Ingestion & History — MeterFlow/);
+    assert.match(res.text, /id="ingest-usage-form"/);
+    assert.match(res.text, /id="usage-table-body"/);
+  });
+
+  it("GET /billing should serve billing.html with 200 OK", async () => {
+    const res = await request(app).get("/billing");
+    assert.equal(res.status, 200);
+    assert.match(res.headers["content-type"], /text\/html/);
+    assert.match(res.text, /Invoices & Billing — MeterFlow/);
+    assert.match(res.text, /id="billing-table-body"/);
+    assert.match(res.text, /id="generate-bill-form"/);
+  });
+
+  it("GET /budgets should serve budgets.html with 200 OK", async () => {
+    const res = await request(app).get("/budgets");
+    assert.equal(res.status, 200);
+    assert.match(res.headers["content-type"], /text\/html/);
+    assert.match(res.text, /Budgets, Alerts & Forecasting — MeterFlow/);
+    assert.match(res.text, /id="budgets-container"/);
+    assert.match(res.text, /id="create-budget-form"/);
+  });
+
+  it("GET new JavaScript controller modules should return application/javascript", async () => {
+    const jsFiles = ["services.js", "usage.js", "billing.js", "budgets.js"];
+    for (const file of jsFiles) {
+      const res = await request(app).get(`/js/${file}`);
+      assert.equal(res.status, 200, `Failed for /js/${file}`);
+      assert.match(res.headers["content-type"], /javascript/);
+    }
+  });
+
+  it("all frontend HTML pages should comply with Helmet CSP (no inline scripts or onclick)", async () => {
+    const pages = ["/", "/login", "/register", "/services", "/usage", "/billing", "/budgets"];
+    for (const page of pages) {
+      const res = await request(app).get(page);
+      assert.equal(res.status, 200);
+      // No inline event handlers like onclick=
+      assert.doesNotMatch(res.text, /\sonclick\s*=/i, `Inline onclick detected in ${page}`);
+      // No inline script tags with executable bodies (allow <script src="...">)
+      assert.doesNotMatch(res.text, /<script(?![^>]*src=)[^>]*>[\s\S]+?<\/script>/i, `Inline script block detected in ${page}`);
+    }
+  });
+
   it("undefined /api/... routes must return 404 JSON, NOT HTML index", async () => {
     const res = await request(app).get("/api/undefined-route-check");
     assert.equal(res.status, 404);

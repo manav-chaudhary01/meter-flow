@@ -63,6 +63,18 @@ app.get("/login", (req, res) => {
 app.get("/register", (req, res) => {
   res.sendFile(path.join(frontendDir, "register.html"));
 });
+app.get("/services", (req, res) => {
+  res.sendFile(path.join(frontendDir, "services.html"));
+});
+app.get("/usage", (req, res) => {
+  res.sendFile(path.join(frontendDir, "usage.html"));
+});
+app.get("/billing", (req, res) => {
+  res.sendFile(path.join(frontendDir, "billing.html"));
+});
+app.get("/budgets", (req, res) => {
+  res.sendFile(path.join(frontendDir, "budgets.html"));
+});
 
 // 404 handler for undefined non-API endpoints
 app.use((req, res) => {

@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tracked Services — MeterFlow</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <!-- Sidebar Navigation -->
+    <aside id="sidebar" class="sidebar">
+      <div class="sidebar-header">
+        <a href="index.html" class="sidebar-logo">
+          <div class="auth-logo-icon">M</div>
+          <span>MeterFlow</span>
+        </a>
+      </div>
+
+      <nav class="sidebar-nav" aria-label="Main Navigation">
+        <a href="index.html" class="nav-item">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="7" height="7"></rect>
+            <rect x="14" y="3" width="7" height="7"></rect>
+            <rect x="14" y="14" width="7" height="7"></rect>
+            <rect x="3" y="14" width="7" height="7"></rect>
+          </svg>
+          Dashboard
+        </a>
+        <a href="services.html" class="nav-item active">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 6h16M4 12h16M4 18h16"></path>
+          </svg>
+          Tracked Services
+        </a>
+        <a href="usage.html" class="nav-item">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+          </svg>
+          Usage History
+        </a>
+        <a href="billing.html" class="nav-item">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="4" width="20" height="16" rx="2"></rect>
+            <line x1="2" y1="10" x2="22" y2="10"></line>
+          </svg>
+          Invoices & Billing
+        </a>
+        <a href="budgets.html" class="nav-item">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="8" x2="12" y2="12"></line>
+            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+          </svg>
+          Budgets & Alerts
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div>MeterFlow SaaS v1.0.0</div>
+        <div style="font-size: 0.725rem; margin-top: 2px;">Multi-Tenant Metered Billing</div>
+      </div>
+    </aside>
+
+    <!-- Main Wrapper -->
+    <div class="main-wrapper">
+      <!-- App Header -->
+      <header class="app-header">
+        <div class="header-left">
+          <button id="mobile-menu-btn" class="mobile-menu-btn" aria-label="Toggle navigation menu">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="3" y1="12" x2="21" y2="12"></line>
+              <line x1="3" y1="6" x2="21" y2="6"></line>
+              <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
+          </button>
+
+          <div class="workspace-selector-container">
+            <label for="workspace-select" style="font-size: 0.8rem; color: var(--color-text-muted); font-weight: 500;">Workspace:</label>
+            <select id="workspace-select" class="workspace-select" aria-label="Select active workspace">
+              <option value="">Loading workspaces...</option>
+            </select>
+            <span id="workspace-role-badge" class="badge badge-neutral">Owner</span>
+          </div>
+        </div>
+
+        <div class="header-right">
+          <button id="refresh-services-btn" class="btn btn-secondary btn-sm" aria-label="Refresh service list">
+            Refresh
+          </button>
+
+          <div class="user-profile-badge">
+            <div id="header-user-avatar" class="user-avatar" aria-hidden="true">U</div>
+            <div class="user-info">
+              <span id="header-user-name" class="user-name">Loading...</span>
+              <span id="header-user-role" class="user-role">...</span>
+            </div>
+          </div>
+
+          <button id="logout-btn" class="btn btn-secondary btn-sm" style="color: var(--color-danger);" aria-label="Sign out of account">
+            Sign Out
+          </button>
+        </div>
+      </header>
+
+      <!-- Services Content Body -->
+      <main class="content-body">
+        <div class="page-header">
+          <div>
+            <h1>Tracked Services</h1>
+            <p>Manage billable APIs, subscription plans, and metered resources scoped to this workspace.</p>
+          </div>
+          <div>
+            <button id="open-create-modal-btn" class="btn btn-primary" aria-label="Create new tracked service">
+              + Create Service
+            </button>
+          </div>
+        </div>
+
+        <div id="services-error-banner" class="alert alert-error" style="display: none;" role="alert"></div>
+        <div id="services-success-banner" class="alert alert-success" style="display: none;" role="status"></div>
+
+        <!-- Filter Bar -->
+        <div class="filter-bar">
+          <div class="filter-group">
+            <label for="filter-status" class="filter-label">Status:</label>
+            <select id="filter-status" class="filter-select">
+              <option value="active">Active Only</option>
+              <option value="archived">Archived Only</option>
+              <option value="all">All Services</option>
+            </select>
+          </div>
+
+          <div class="filter-group">
+            <label for="filter-type" class="filter-label">Tracking Type:</label>
+            <select id="filter-type" class="filter-select">
+              <option value="">All Types</option>
+              <option value="metered">Metered</option>
+              <option value="subscription">Subscription</option>
+              <option value="hybrid">Hybrid</option>
+            </select>
+          </div>
+
+          <div class="filter-group">
+            <label for="filter-category" class="filter-label">Category:</label>
+            <input type="text" id="filter-category" class="filter-input" placeholder="e.g. database, ai, compute">
+          </div>
+
+          <button id="reset-filters-btn" class="btn btn-secondary btn-sm" style="margin-left: auto;">
+            Reset Filters
+          </button>
+        </div>
+
+        <!-- Services Table Section -->
+        <section class="section-card" aria-labelledby="services-list-heading">
+          <div class="section-card-header">
+            <h2 id="services-list-heading">Service Catalog</h2>
+            <span id="services-count-badge" class="badge badge-neutral">0 Services</span>
+          </div>
+
+          <div class="section-card-body" style="padding: 0;">
+            <div class="table-responsive">
+              <table class="data-table" aria-label="Tracked Services Catalog">
+                <thead>
+                  <tr>
+                    <th scope="col">Service Name</th>
+                    <th scope="col">Category</th>
+                    <th scope="col">Type</th>
+                    <th scope="col">Pricing Rate</th>
+                    <th scope="col">Currency</th>
+                    <th scope="col">Status</th>
+                    <th scope="col" style="text-align: right;">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="services-table-body">
+                  <tr>
+                    <td colspan="7" style="text-align: center; color: var(--color-text-muted); padding: 2rem;">Loading services...</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Empty State -->
+            <div id="services-empty" class="empty-state" style="display: none;">
+              <div class="empty-state-icon">📦</div>
+              <div class="empty-state-title">No Services Found</div>
+              <div class="empty-state-desc">Create your first tracked service to begin metered usage ingestion and automated billing.</div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <!-- Create Service Modal -->
+  <div id="create-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="create-modal-title">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 id="create-modal-title">Create Tracked Service</h3>
+        <button type="button" class="modal-close-btn" data-close-modal="create-modal" aria-label="Close dialog">&times;</button>
+      </div>
+      <form id="create-service-form">
+        <div class="modal-body">
+          <div id="create-modal-error" class="alert alert-error" style="display: none;" role="alert"></div>
+
+          <div class="form-group">
+            <label for="create-name" class="form-label">Service Name *</label>
+            <input type="text" id="create-name" class="form-input" required minlength="2" maxlength="100" placeholder="e.g. LLM Inference API">
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="create-provider" class="form-label">Provider</label>
+              <input type="text" id="create-provider" class="form-input" maxlength="100" placeholder="e.g. OpenAI, AWS">
+            </div>
+            <div class="form-group">
+              <label for="create-category" class="form-label">Category</label>
+              <input type="text" id="create-category" class="form-input" maxlength="100" value="general" placeholder="general">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="create-tracking-type" class="form-label">Tracking Type *</label>
+              <select id="create-tracking-type" class="form-select" required>
+                <option value="metered">Metered (Usage-based)</option>
+                <option value="subscription">Subscription (Flat periodic fee)</option>
+                <option value="hybrid">Hybrid (Base fee + usage)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="create-currency" class="form-label">Currency *</label>
+              <input type="text" id="create-currency" class="form-input" required minlength="3" maxlength="3" value="USD" style="text-transform: uppercase;">
+              <span class="form-hint">3-letter ISO code (e.g. USD, EUR)</span>
+            </div>
+          </div>
+
+          <!-- Metered Fields (metered or hybrid) -->
+          <div id="create-metered-fields" class="form-row">
+            <div class="form-group">
+              <label for="create-unit" class="form-label">Unit of Measure *</label>
+              <input type="text" id="create-unit" class="form-input" placeholder="e.g. requests, gb_hours">
+            </div>
+            <div class="form-group">
+              <label for="create-unit-price" class="form-label">Unit Price *</label>
+              <input type="number" id="create-unit-price" class="form-input" step="0.0001" min="0" placeholder="0.005">
+            </div>
+          </div>
+
+          <!-- Subscription Fields (subscription or hybrid) -->
+          <div id="create-subscription-fields" class="form-row" style="display: none;">
+            <div class="form-group">
+              <label for="create-sub-amount" class="form-label">Subscription Amount *</label>
+              <input type="number" id="create-sub-amount" class="form-input" step="0.01" min="0" placeholder="49.00">
+            </div>
+            <div class="form-group">
+              <label for="create-interval" class="form-label">Billing Interval *</label>
+              <select id="create-interval" class="form-select">
+                <option value="monthly" selected>Monthly</option>
+                <option value="daily">Daily</option>
+                <option value="quarterly">Quarterly</option>
+                <option value="yearly">Yearly</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-close-modal="create-modal">Cancel</button>
+          <button type="submit" id="create-submit-btn" class="btn btn-primary">Create Service</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Edit Service Modal -->
+  <div id="edit-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="edit-modal-title">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 id="edit-modal-title">Edit Service</h3>
+        <button type="button" class="modal-close-btn" data-close-modal="edit-modal" aria-label="Close dialog">&times;</button>
+      </div>
+      <form id="edit-service-form">
+        <input type="hidden" id="edit-id">
+        <div class="modal-body">
+          <div id="edit-modal-error" class="alert alert-error" style="display: none;" role="alert"></div>
+
+          <div class="form-group">
+            <label for="edit-name" class="form-label">Service Name *</label>
+            <input type="text" id="edit-name" class="form-input" required minlength="2" maxlength="100">
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="edit-provider" class="form-label">Provider</label>
+              <input type="text" id="edit-provider" class="form-input" maxlength="100">
+            </div>
+            <div class="form-group">
+              <label for="edit-category" class="form-label">Category</label>
+              <input type="text" id="edit-category" class="form-input" maxlength="100">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="edit-currency" class="form-label">Currency</label>
+              <input type="text" id="edit-currency" class="form-input" minlength="3" maxlength="3" style="text-transform: uppercase;">
+            </div>
+            <div class="form-group">
+              <label for="edit-status" class="form-label">Status</label>
+              <select id="edit-status" class="form-select">
+                <option value="active">Active</option>
+                <option value="archived">Archived</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Dynamic Edit Pricing Fields -->
+          <div id="edit-metered-fields" class="form-row">
+            <div class="form-group">
+              <label for="edit-unit" class="form-label">Unit of Measure</label>
+              <input type="text" id="edit-unit" class="form-input">
+            </div>
+            <div class="form-group">
+              <label for="edit-unit-price" class="form-label">Unit Price</label>
+              <input type="number" id="edit-unit-price" class="form-input" step="0.0001" min="0">
+            </div>
+          </div>
+
+          <div id="edit-subscription-fields" class="form-row" style="display: none;">
+            <div class="form-group">
+              <label for="edit-sub-amount" class="form-label">Subscription Amount</label>
+              <input type="number" id="edit-sub-amount" class="form-input" step="0.01" min="0">
+            </div>
+            <div class="form-group">
+              <label for="edit-interval" class="form-label">Billing Interval</label>
+              <select id="edit-interval" class="form-select">
+                <option value="monthly">Monthly</option>
+                <option value="daily">Daily</option>
+                <option value="quarterly">Quarterly</option>
+                <option value="yearly">Yearly</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-close-modal="edit-modal">Cancel</button>
+          <button type="submit" id="edit-submit-btn" class="btn btn-primary">Save Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/services.js"></script>
+</body>
+</html>
