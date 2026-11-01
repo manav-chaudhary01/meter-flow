@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Create Workspace — MeterFlow</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div class="auth-wrapper">
+    <div class="auth-header">
+      <div class="auth-logo">
+        <div class="auth-logo-icon">M</div>
+        <span>MeterFlow</span>
+      </div>
+      <p>Multi-Tenant SaaS Metered Billing Platform</p>
+    </div>
+
+    <main class="auth-card">
+      <h2>Create Your Account</h2>
+      <p class="subtitle">Get started with usage tracking, budgets, and metered billing</p>
+
+      <div id="auth-error-banner" class="alert alert-error" style="display: none;" role="alert"></div>
+
+      <form id="register-form" novalidate>
+        <div class="form-group">
+          <label for="name" class="form-label">Full Name</label>
+          <input
+            type="text"
+            id="name"
+            name="name"
+            class="form-input"
+            placeholder="Jane Doe"
+            autocomplete="name"
+            required
+          >
+        </div>
+
+        <div class="form-group">
+          <label for="email" class="form-label">Work Email</label>
+          <input
+            type="email"
+            id="email"
+            name="email"
+            class="form-input"
+            placeholder="jane@company.com"
+            autocomplete="email"
+            required
+          >
+        </div>
+
+        <div class="form-group">
+          <label for="organization-name" class="form-label">Workspace / Organization Name</label>
+          <input
+            type="text"
+            id="organization-name"
+            name="organizationName"
+            class="form-input"
+            placeholder="Acme Cloud Platform"
+            required
+          >
+        </div>
+
+        <div class="form-group">
+          <label for="workspace-type" class="form-label">Workspace Type</label>
+          <select id="workspace-type" name="workspaceType" class="form-select">
+            <option value="organization" selected>Organization (Multi-user, team billing)</option>
+            <option value="personal">Personal (Single-user individual usage)</option>
+          </select>
+          <span class="form-help">Organization workspaces allow inviting team members with role-based permissions.</span>
+        </div>
+
+        <div class="form-group">
+          <label for="password" class="form-label">Password</label>
+          <div class="password-input-wrapper">
+            <input
+              type="password"
+              id="password"
+              name="password"
+              class="form-input"
+              placeholder="••••••••"
+              autocomplete="new-password"
+              minlength="6"
+              required
+            >
+            <button
+              type="button"
+              id="toggle-password-btn"
+              class="toggle-password-btn"
+              aria-label="Toggle password visibility"
+            >Show</button>
+          </div>
+          <span class="form-help">Must be at least 6 characters long.</span>
+        </div>
+
+        <button type="submit" id="register-submit-btn" class="btn btn-primary" style="width: 100%; margin-top: var(--space-md);">
+          Create Account
+        </button>
+      </form>
+
+      <footer class="auth-footer">
+        Already have a MeterFlow account? <a href="login.html">Sign in here</a>
+      </footer>
+    </main>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/auth.js"></script>
+</body>
+</html>

@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign In — MeterFlow</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div class="auth-wrapper">
+    <div class="auth-header">
+      <div class="auth-logo">
+        <div class="auth-logo-icon">M</div>
+        <span>MeterFlow</span>
+      </div>
+      <p>Multi-Tenant SaaS Metered Billing Platform</p>
+    </div>
+
+    <main class="auth-card">
+      <h2>Welcome Back</h2>
+      <p class="subtitle">Enter your credentials to access your workspaces</p>
+
+      <div id="auth-info-banner" class="alert alert-warning" style="display: none;" role="status"></div>
+      <div id="auth-error-banner" class="alert alert-error" style="display: none;" role="alert"></div>
+
+      <form id="login-form" novalidate>
+        <div class="form-group">
+          <label for="email" class="form-label">Email Address</label>
+          <input
+            type="email"
+            id="email"
+            name="email"
+            class="form-input"
+            placeholder="name@company.com"
+            autocomplete="email"
+            required
+          >
+        </div>
+
+        <div class="form-group">
+          <label for="password" class="form-label">Password</label>
+          <div class="password-input-wrapper">
+            <input
+              type="password"
+              id="password"
+              name="password"
+              class="form-input"
+              placeholder="••••••••"
+              autocomplete="current-password"
+              required
+            >
+            <button
+              type="button"
+              id="toggle-password-btn"
+              class="toggle-password-btn"
+              aria-label="Toggle password visibility"
+            >Show</button>
+          </div>
+        </div>
+
+        <button type="submit" id="login-submit-btn" class="btn btn-primary" style="width: 100%; margin-top: var(--space-md);">
+          Sign In
+        </button>
+      </form>
+
+      <footer class="auth-footer">
+        Don't have an account yet? <a href="register.html">Create a workspace</a>
+      </footer>
+    </main>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/auth.js"></script>
+</body>
+</html>
