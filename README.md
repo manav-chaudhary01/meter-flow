@@ -12,8 +12,9 @@ The system is built on a shared backend architecture supporting both personal an
 
 | Layer | Technology | Description |
 |---|---|---|
+| **Frontend UI** | HTML5 / CSS3 / Vanilla JavaScript | Single-origin responsive web app (no frameworks, no bundlers) |
 | **Runtime & Language** | Node.js (v24+) / ECMAScript Modules | Asynchronous backend runtime |
-| **Framework** | Express.js (v5) | HTTP REST API framework |
+| **Framework** | Express.js (v5) | HTTP REST API framework & static asset server |
 | **Database** | MongoDB Atlas & Mongoose (v9) | Multi-tenant persistent document store |
 | **Precision Math** | Decimal.js | Arbitrary-precision financial arithmetic |
 | **Authentication** | JWT (`jsonwebtoken`) & `bcryptjs` | Stateless signed tokens & password hashing |
@@ -32,7 +33,7 @@ The system is built on a shared backend architecture supporting both personal an
 meter-flow/
 ├── backend/
 │   ├── src/
-│   │   ├── app.js               # Express app & route mounting
+│   │   ├── app.js               # Express app, static serving & route mounting
 │   │   ├── server.js            # Entry point, DB connect & idempotent migration
 │   │   ├── config/              # Database & environment configuration
 │   │   ├── controllers/         # Handlers (auth, workspace, service, usage, billing, budget, resource)
@@ -41,7 +42,7 @@ meter-flow/
 │   │   ├── routes/              # Express API route modules
 │   │   ├── services/            # Pure calculation & evaluation engines (billingCalculator, spendCalculator, spendForecaster, alertEvaluator)
 │   │   └── utils/               # Migration & workspace backfill utilities
-│   └── tests/                   # Automated unit & integration test suite (140 tests across 45 suites)
+│   └── tests/                   # Automated unit & integration test suite (149 tests across 46 suites)
 │       ├── helpers/db.js        # In-memory test database runner
 │       ├── health.test.js       # Health check & 404 tests
 │       ├── auth.test.js         # Authentication tests
@@ -52,9 +53,20 @@ meter-flow/
 │       ├── budgets.test.js      # Budget CRUD, actual spend, threshold alerts & forecasting tests
 │       ├── reliability.test.js  # Milestone F reliability, reconciliation & operational tests
 │       ├── e2eWorkflow.test.js  # Milestone G 15-step end-to-end integration lifecycle tests
+│       ├── frontendServing.test.js # Frontend static serving, routing & security boundary tests
 │       ├── resource.test.js     # Resource CRUD tests
 │       ├── tenantIsolation.test.js # Multi-tenant isolation tests
 │       └── migration.test.js    # Idempotent migration verification
+├── frontend/
+│   ├── index.html               # Main SaaS dashboard interface
+│   ├── login.html               # User sign-in interface
+│   ├── register.html            # User & workspace creation interface
+│   ├── css/
+│   │   └── styles.css           # Responsive, accessible design system
+│   └── js/
+│       ├── api.js               # Reusable API fetch driver & session manager
+│       ├── auth.js              # Auth form handlers & route guard
+│       └── dashboard.js         # Dashboard metrics, invoices & alerts controller
 ├── docs/
 │   ├── API.md                   # Complete REST API specification
 │   ├── PROJECT_DEMO.md          # Step-by-step backend demonstration guide & checklist
@@ -92,11 +104,15 @@ cd meter-flow/backend
 npm install
 ```
 
-### 4. Running the Development Server
+### 4. Running the Application (Backend & Frontend)
 ```powershell
 npm run dev
 ```
-The server will start on `http://localhost:5000` and automatically backfill any missing workspace types or memberships idempotently.
+The server will start on `http://localhost:5000` and serve both the REST API and the static web frontend from a single local origin:
+- **Web App Dashboard:** [http://localhost:5000/](http://localhost:5000/) (or `/index.html`)
+- **User Sign-In:** [http://localhost:5000/login](http://localhost:5000/login) (or `/login.html`)
+- **Workspace Registration:** [http://localhost:5000/register](http://localhost:5000/register) (or `/register.html`)
+- **API Health Endpoint:** [http://localhost:5000/api/health](http://localhost:5000/api/health)
 
 ### 5. Running Database Migration Standalone
 ```powershell
@@ -107,7 +123,7 @@ npm run migrate:workspaces
 ```powershell
 npm test
 ```
-The test suite executes 140 automated tests across 45 test suites using Node's native test runner (`node:test`) with an isolated in-memory MongoDB instance. No external database connection is required.
+The test suite executes 149 automated tests across 46 test suites using Node's native test runner (`node:test`) with an isolated in-memory MongoDB instance. No external database connection is required.
 
 ---
 
@@ -156,6 +172,17 @@ For full request/response schemas, parameters, and examples, see [docs/API.md](d
 
 ---
 
+## Frontend Architecture & Authentication Security
+
+The frontend is implemented as a lightweight, framework-free single-page interface using HTML5, CSS3, and Vanilla JavaScript ES Modules:
+- **Zero Build Step:** Uses browser-native `fetch()` APIs and modern CSS custom properties without requiring Node bundling tools (Vite, Webpack, etc.).
+- **Single-Origin Serving:** Express safely serves the static frontend assets from `/frontend` while preserving strict `/api/...` JSON routing and 404 handlers. Backend source files and `.env` are strictly excluded from static mounts.
+- **Authentication Lifecycle:** JWT tokens issued by `/api/auth/login` and `/api/auth/register` are stored in browser `localStorage`. The API client module (`js/api.js`) automatically attaches `Authorization: Bearer <token>` to protected requests.
+- **Session Expiration:** Upon receiving HTTP `401 Unauthorized`, the client purges stored tokens and immediately redirects to `login.html?expired=true`.
+- **Security Boundaries:** Client-side route guarding is an ergonomic presentation layer; all authorization rules, role restrictions (`owner`/`admin`/`member`), and tenant data boundaries are strictly enforced server-side.
+
+---
+
 ## Development Roadmap
 
 - [x] **Milestone A — Stabilize Backend Foundation**: Automated testing, environment validation, tenant boundary verification, Mongoose 9 updates, API docs.
@@ -165,3 +192,4 @@ For full request/response schemas, parameters, and examples, see [docs/API.md](d
 - [x] **Milestone E — Budgets & Analytics**: Budget allocation, spend tracking, threshold alerts, explainable linear burn-rate forecasts.
 - [x] **Milestone F — Reliability, Reconciliation & Production Readiness**: Self-healing billing reconciliation, suspended membership protection, privilege anti-escalation, production error sanitization, operational health reporting, graceful shutdown, environment validation.
 - [x] **Milestone G — Final Integration, Release Validation & Project Completion**: Full 15-step business workflow integration test suite, explicit line-item usage reconciliation, demonstration checklist (`PROJECT_DEMO.md`), master test plan (`TEST_PLAN.md`), academic report notes (`PROJECT_REPORT_NOTES.md`).
+- [x] **Full-Stack Phase 1 — Frontend Foundation**: Vanilla HTML5, CSS3, and JavaScript web frontend, responsive SaaS dashboard shell, forms with client-side validation, password visibility toggles, submit debounce protection, session expiration handling, Express static asset serving, 149 passing automated tests.

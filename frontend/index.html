@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard — MeterFlow</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <!-- Sidebar -->
+    <aside id="sidebar" class="sidebar">
+      <div class="sidebar-header">
+        <a href="index.html" class="sidebar-logo">
+          <div class="auth-logo-icon">M</div>
+          <span>MeterFlow</span>
+        </a>
+      </div>
+
+      <nav class="sidebar-nav" aria-label="Main Navigation">
+        <a href="index.html" class="nav-item active">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="7" height="7"></rect>
+            <rect x="14" y="3" width="7" height="7"></rect>
+            <rect x="14" y="14" width="7" height="7"></rect>
+            <rect x="3" y="14" width="7" height="7"></rect>
+          </svg>
+          Dashboard
+        </a>
+        <a href="#services" class="nav-item">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 6h16M4 12h16M4 18h16"></path>
+          </svg>
+          Tracked Services
+        </a>
+        <a href="#usage" class="nav-item">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+          </svg>
+          Usage History
+        </a>
+        <a href="#billing" class="nav-item">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="4" width="20" height="16" rx="2"></rect>
+            <line x1="2" y1="10" x2="22" y2="10"></line>
+          </svg>
+          Invoices & Billing
+        </a>
+        <a href="#budgets" class="nav-item">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="8" x2="12" y2="12"></line>
+            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+          </svg>
+          Budgets & Alerts
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div>MeterFlow SaaS v1.0.0</div>
+        <div style="font-size: 0.725rem; margin-top: 2px;">Multi-Tenant Metered Billing</div>
+      </div>
+    </aside>
+
+    <!-- Main Wrapper -->
+    <div class="main-wrapper">
+      <!-- App Header -->
+      <header class="app-header">
+        <div class="header-left">
+          <button id="mobile-menu-btn" class="mobile-menu-btn" aria-label="Toggle navigation menu">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="3" y1="12" x2="21" y2="12"></line>
+              <line x1="3" y1="6" x2="21" y2="6"></line>
+              <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
+          </button>
+
+          <div class="workspace-selector-container">
+            <label for="workspace-select" style="font-size: 0.8rem; color: var(--color-text-muted); font-weight: 500;">Workspace:</label>
+            <select id="workspace-select" class="workspace-select" aria-label="Select active workspace">
+              <option value="">Loading workspaces...</option>
+            </select>
+            <span id="workspace-role-badge" class="badge badge-neutral">Owner</span>
+          </div>
+        </div>
+
+        <div class="header-right">
+          <button id="refresh-dashboard-btn" class="btn btn-secondary btn-sm" aria-label="Refresh dashboard data">
+            Refresh
+          </button>
+
+          <div class="user-profile-badge">
+            <div id="header-user-avatar" class="user-avatar" aria-hidden="true">U</div>
+            <div class="user-info">
+              <span id="header-user-name" class="user-name">Loading...</span>
+              <span id="header-user-role" class="user-role">...</span>
+            </div>
+          </div>
+
+          <button id="logout-btn" class="btn btn-secondary btn-sm" style="color: var(--color-danger);" aria-label="Sign out of account">
+            Sign Out
+          </button>
+        </div>
+      </header>
+
+      <!-- Dashboard Content Body -->
+      <main class="content-body">
+        <div class="page-header">
+          <div>
+            <h1>Overview Dashboard</h1>
+            <p>Monitor your active services, period billing calculations, budgets, and spend alerts.</p>
+          </div>
+        </div>
+
+        <div id="dashboard-error-banner" class="alert alert-error" style="display: none;" role="alert"></div>
+
+        <!-- Metric KPI Cards -->
+        <section class="metric-grid" aria-label="Key Performance Indicators">
+          <div class="metric-card">
+            <div class="metric-title">Active Services</div>
+            <div id="metric-active-services" class="metric-value">--</div>
+            <div id="metric-active-services-sub" class="metric-subtitle">Loading catalog...</div>
+          </div>
+
+          <div class="metric-card">
+            <div class="metric-title">Recent Invoiced Spend</div>
+            <div id="metric-total-spend" class="metric-value">--</div>
+            <div id="metric-total-spend-sub" class="metric-subtitle">Loading billing history...</div>
+          </div>
+
+          <div class="metric-card">
+            <div class="metric-title">Monitored Budgets</div>
+            <div id="metric-active-budgets" class="metric-value">--</div>
+            <div id="metric-active-budgets-sub" class="metric-subtitle">Loading spend limits...</div>
+          </div>
+
+          <div class="metric-card">
+            <div class="metric-title">Active Alerts</div>
+            <div id="metric-active-alerts" class="metric-value">--</div>
+            <div id="metric-active-alerts-sub" class="metric-subtitle">Loading threshold triggers...</div>
+          </div>
+        </section>
+
+        <!-- Two Column Sections Grid: Invoices & Budgets -->
+        <div class="dashboard-sections-grid">
+          <!-- Recent Invoices Table -->
+          <section class="section-card" aria-labelledby="invoices-heading">
+            <div class="section-card-header">
+              <h2 id="invoices-heading">Recent Invoices &amp; Billing Records</h2>
+              <span class="badge badge-neutral">Finalized Cycles</span>
+            </div>
+            <div class="section-card-body" style="padding: 0;">
+              <div class="table-responsive">
+                <table class="data-table" aria-label="Recent Invoices">
+                  <thead>
+                    <tr>
+                      <th scope="col">Invoice #</th>
+                      <th scope="col">Period</th>
+                      <th scope="col">Line Items</th>
+                      <th scope="col">Total</th>
+                      <th scope="col">Status</th>
+                      <th scope="col">Date</th>
+                    </tr>
+                  </thead>
+                  <tbody id="invoices-table-body">
+                    <tr>
+                      <td colspan="6" style="text-align: center; color: var(--color-text-muted); padding: 2rem;">Loading billing records...</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div id="invoices-empty" class="empty-state" style="display: none;">
+                <div class="empty-state-icon">📄</div>
+                <div class="empty-state-title">No Billing Records Yet</div>
+                <div class="empty-state-desc">Generate your first monthly invoice under Billing to see calculated usage fees.</div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Active Budgets List -->
+          <section class="section-card" aria-labelledby="budgets-heading">
+            <div class="section-card-header">
+              <h2 id="budgets-heading">Active Budgets</h2>
+              <span class="badge badge-info">Spend Limits</span>
+            </div>
+            <div class="section-card-body">
+              <div id="budgets-list-container" class="budget-list">
+                <div style="color: var(--color-text-muted); text-align: center; padding: 2rem;">Loading budgets...</div>
+              </div>
+              <div id="budgets-empty" class="empty-state" style="display: none;">
+                <div class="empty-state-icon">🎯</div>
+                <div class="empty-state-title">No Active Budgets</div>
+                <div class="empty-state-desc">Define a spending budget to monitor thresholds and forecast monthly burn rates.</div>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <!-- Full Width: Recent Alerts -->
+        <section class="section-card" aria-labelledby="alerts-heading">
+          <div class="section-card-header">
+            <h2 id="alerts-heading">Recent Spend Threshold Alerts</h2>
+            <span class="badge badge-warning">Real-time Thresholds</span>
+          </div>
+          <div class="section-card-body">
+            <div id="alerts-list-container" class="alerts-list">
+              <div style="color: var(--color-text-muted); text-align: center; padding: 2rem;">Loading alerts...</div>
+            </div>
+            <div id="alerts-empty" class="empty-state" style="display: none;">
+              <div class="empty-state-icon">🛡️</div>
+              <div class="empty-state-title">No Active Alerts</div>
+              <div class="empty-state-desc">All budgets are operating within normal spending thresholds.</div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/dashboard.js"></script>
+</body>
+</html>

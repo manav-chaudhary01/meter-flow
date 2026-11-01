@@ -2,6 +2,8 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import mongoose from "mongoose";
+import path from "path";
+import { fileURLToPath } from "url";
 import authRoutes from "./routes/authRoutes.js";
 import resourceRoutes from "./routes/resourceRoutes.js";
 import workspaceRoutes from "./routes/workspaceRoutes.js";
@@ -9,6 +11,10 @@ import serviceRoutes from "./routes/serviceRoutes.js";
 import usageRoutes from "./routes/usageRoutes.js";
 import billingRoutes from "./routes/billingRoutes.js";
 import budgetRoutes from "./routes/budgetRoutes.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const frontendDir = path.resolve(__dirname, "../../frontend");
 
 const app = express();
 
@@ -36,7 +42,29 @@ app.use("/api/usage", usageRoutes);
 app.use("/api/billing", billingRoutes);
 app.use("/api/budgets", budgetRoutes);
 
-// 404 handler for undefined endpoints
+// Explicit 404 handler for undefined API routes
+app.use("/api", (req, res) => {
+  res.status(404).json({
+    success: false,
+    message: `Cannot ${req.method} ${req.originalUrl}`
+  });
+});
+
+// Safely serve static frontend files
+app.use(express.static(frontendDir));
+
+// Frontend navigation route shortcuts
+app.get("/", (req, res) => {
+  res.sendFile(path.join(frontendDir, "index.html"));
+});
+app.get("/login", (req, res) => {
+  res.sendFile(path.join(frontendDir, "login.html"));
+});
+app.get("/register", (req, res) => {
+  res.sendFile(path.join(frontendDir, "register.html"));
+});
+
+// 404 handler for undefined non-API endpoints
 app.use((req, res) => {
   res.status(404).json({
     success: false,
