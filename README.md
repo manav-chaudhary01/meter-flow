@@ -42,7 +42,7 @@ meter-flow/
 │   │   ├── routes/              # Express API route modules
 │   │   ├── services/            # Pure calculation & evaluation engines (billingCalculator, spendCalculator, spendForecaster, alertEvaluator)
 │   │   └── utils/               # Migration & workspace backfill utilities
-│   └── tests/                   # Automated unit & integration test suite (149 tests across 46 suites)
+│   └── tests/                   # Automated unit & integration test suite (155 tests across 46 suites)
 │       ├── helpers/db.js        # In-memory test database runner
 │       ├── health.test.js       # Health check & 404 tests
 │       ├── auth.test.js         # Authentication tests
@@ -53,20 +53,28 @@ meter-flow/
 │       ├── budgets.test.js      # Budget CRUD, actual spend, threshold alerts & forecasting tests
 │       ├── reliability.test.js  # Milestone F reliability, reconciliation & operational tests
 │       ├── e2eWorkflow.test.js  # Milestone G 15-step end-to-end integration lifecycle tests
-│       ├── frontendServing.test.js # Frontend static serving, routing & security boundary tests
+│       ├── frontendServing.test.js # Frontend static serving, routing & security boundary tests (15 tests)
 │       ├── resource.test.js     # Resource CRUD tests
 │       ├── tenantIsolation.test.js # Multi-tenant isolation tests
 │       └── migration.test.js    # Idempotent migration verification
 ├── frontend/
-│   ├── index.html               # Main SaaS dashboard interface
+│   ├── index.html               # Main SaaS overview dashboard
+│   ├── services.html            # Tracked services catalog & management
+│   ├── usage.html               # Metered usage ingestion & audit logs
+│   ├── billing.html             # Invoices, billing cycles & reconciled usage
+│   ├── budgets.html             # Budgets, threshold alerts & run-rate forecasts
 │   ├── login.html               # User sign-in interface
 │   ├── register.html            # User & workspace creation interface
 │   ├── css/
-│   │   └── styles.css           # Responsive, accessible design system
+│   │   └── styles.css           # Responsive, accessible WCAG AA design system
 │   └── js/
 │       ├── api.js               # Reusable API fetch driver & session manager
 │       ├── auth.js              # Auth form handlers & route guard
-│       └── dashboard.js         # Dashboard metrics, invoices & alerts controller
+│       ├── dashboard.js         # Dashboard metrics, invoices & alerts controller
+│       ├── services.js          # Services CRUD & filter controller
+│       ├── usage.js             # Usage ingestion & history controller
+│       ├── billing.js           # Invoices, period generation & line-items controller
+│       └── budgets.js           # Budgets, alerts & forecast projections controller
 ├── docs/
 │   ├── API.md                   # Complete REST API specification
 │   ├── PROJECT_DEMO.md          # Step-by-step backend demonstration guide & checklist
@@ -110,6 +118,10 @@ npm run dev
 ```
 The server will start on `http://localhost:5000` and serve both the REST API and the static web frontend from a single local origin:
 - **Web App Dashboard:** [http://localhost:5000/](http://localhost:5000/) (or `/index.html`)
+- **Tracked Services Screen:** [http://localhost:5000/services](http://localhost:5000/services) (or `/services.html`)
+- **Usage Ingestion & History:** [http://localhost:5000/usage](http://localhost:5000/usage) (or `/usage.html`)
+- **Invoices & Billing Cycles:** [http://localhost:5000/billing](http://localhost:5000/billing) (or `/billing.html`)
+- **Budgets, Alerts & Forecasts:** [http://localhost:5000/budgets](http://localhost:5000/budgets) (or `/budgets.html`)
 - **User Sign-In:** [http://localhost:5000/login](http://localhost:5000/login) (or `/login.html`)
 - **Workspace Registration:** [http://localhost:5000/register](http://localhost:5000/register) (or `/register.html`)
 - **API Health Endpoint:** [http://localhost:5000/api/health](http://localhost:5000/api/health)
@@ -123,7 +135,7 @@ npm run migrate:workspaces
 ```powershell
 npm test
 ```
-The test suite executes 149 automated tests across 46 test suites using Node's native test runner (`node:test`) with an isolated in-memory MongoDB instance. No external database connection is required.
+The test suite executes 155 automated tests across 46 test suites using Node's native test runner (`node:test`) with an isolated in-memory MongoDB instance. No external database connection is required.
 
 ---
 
@@ -193,3 +205,4 @@ The frontend is implemented as a lightweight, framework-free single-page interfa
 - [x] **Milestone F — Reliability, Reconciliation & Production Readiness**: Self-healing billing reconciliation, suspended membership protection, privilege anti-escalation, production error sanitization, operational health reporting, graceful shutdown, environment validation.
 - [x] **Milestone G — Final Integration, Release Validation & Project Completion**: Full 15-step business workflow integration test suite, explicit line-item usage reconciliation, demonstration checklist (`PROJECT_DEMO.md`), master test plan (`TEST_PLAN.md`), academic report notes (`PROJECT_REPORT_NOTES.md`).
 - [x] **Full-Stack Phase 1 — Frontend Foundation**: Vanilla HTML5, CSS3, and JavaScript web frontend, responsive SaaS dashboard shell, forms with client-side validation, password visibility toggles, submit debounce protection, session expiration handling, Express static asset serving, 149 passing automated tests.
+- [x] **Full-Stack Phase 2 — Core Management Screens**: Comprehensive vanilla management screens for Tracked Services (`services.html`), Usage Ingestion & History (`usage.html`), Invoices & Reconciled Line Items (`billing.html`), and Budgets, Alerts & Linear Run-Rate Forecasting (`budgets.html`). Zero-build, standards-compliant, CSP-protected, workspace-scoped, with 155 passing automated tests.
