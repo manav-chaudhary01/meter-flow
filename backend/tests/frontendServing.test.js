@@ -65,6 +65,14 @@ describe("Frontend Static Serving & Security Boundaries", () => {
     assert.match(res.text, /id="create-service-form"/);
   });
 
+  it("GET /js/services.js should serve the services controller with application/javascript", async () => {
+    const res = await request(app).get("/js/services.js");
+    assert.equal(res.status, 200);
+    assert.match(res.headers["content-type"], /javascript/);
+    assert.match(res.text, /initServicesPage/);
+    assert.match(res.text, /renderServicesTable/);
+  });
+
   it("GET /usage should serve usage.html with 200 OK", async () => {
     const res = await request(app).get("/usage");
     assert.equal(res.status, 200);

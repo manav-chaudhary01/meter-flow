@@ -370,8 +370,10 @@
     const emptyState = document.getElementById("services-empty");
     const countBadge = document.getElementById("services-count-badge");
     const errorBanner = document.getElementById("services-error-banner");
+    const refreshBtn = document.getElementById("refresh-services-btn");
 
     if (errorBanner) errorBanner.style.display = "none";
+    if (emptyState) emptyState.style.display = "none";
 
     const status = document.getElementById("filter-status")?.value || "active";
     const trackingType = document.getElementById("filter-type")?.value || "";
@@ -381,14 +383,25 @@
     if (trackingType) params.trackingType = trackingType;
     if (category) params.category = category;
 
+    // Loading State
     if (tableBody) {
-      tableBody.innerHTML = `
-        <tr>
-          <td colspan="7" style="text-align: center; color: var(--color-text-muted); padding: 2rem;">
-            Loading services...
-          </td>
-        </tr>
-      `;
+      while (tableBody.firstChild) {
+        tableBody.removeChild(tableBody.firstChild);
+      }
+      const loadingRow = document.createElement("tr");
+      const loadingTd = document.createElement("td");
+      loadingTd.colSpan = 9;
+      loadingTd.style.textAlign = "center";
+      loadingTd.style.color = "var(--color-text-muted)";
+      loadingTd.style.padding = "2.5rem";
+      loadingTd.textContent = "Loading services for active workspace...";
+      loadingRow.appendChild(loadingTd);
+      tableBody.appendChild(loadingRow);
+    }
+
+    if (refreshBtn) {
+      refreshBtn.disabled = true;
+      refreshBtn.textContent = "Refreshing...";
     }
 
     try {
@@ -400,8 +413,13 @@
         countBadge.textContent = `${services.length} Service${services.length === 1 ? "" : "s"}`;
       }
 
+      if (tableBody) {
+        while (tableBody.firstChild) {
+          tableBody.removeChild(tableBody.firstChild);
+        }
+      }
+
       if (services.length === 0) {
-        if (tableBody) tableBody.innerHTML = "";
         if (emptyState) emptyState.style.display = "block";
         return;
       }
@@ -410,107 +428,187 @@
       renderServicesTable(services);
     } catch (err) {
       if (errorBanner) {
-        errorBanner.textContent = `Error loading services: ${err.message}`;
+        errorBanner.textContent = `Error loading services: ${err.message || "Failed to fetch services."}`;
         errorBanner.style.display = "block";
       }
       if (tableBody) {
-        tableBody.innerHTML = `
-          <tr>
-            <td colspan="7" style="text-align: center; color: var(--color-danger); padding: 2rem;">
-              Failed to load services. Please check connection and try again.
-            </td>
-          </tr>
-        `;
+        while (tableBody.firstChild) {
+          tableBody.removeChild(tableBody.firstChild);
+        }
+        const errRow = document.createElement("tr");
+        const errTd = document.createElement("td");
+        errTd.colSpan = 9;
+        errTd.style.textAlign = "center";
+        errTd.style.color = "var(--color-danger)";
+        errTd.style.padding = "2.5rem";
+        errTd.textContent = "Failed to load services. Please check connection and try again.";
+        errRow.appendChild(errTd);
+        tableBody.appendChild(errRow);
+      }
+    } finally {
+      if (refreshBtn) {
+        refreshBtn.disabled = false;
+        refreshBtn.textContent = "Refresh";
       }
     }
   }
 
+  /**
+   * Pure safe DOM rendering for services table.
+   * Completely avoids unsafe innerHTML injection of untrusted API values.
+   */
   function renderServicesTable(services) {
     const tableBody = document.getElementById("services-table-body");
     if (!tableBody) return;
 
-    tableBody.innerHTML = "";
+    while (tableBody.firstChild) {
+      tableBody.removeChild(tableBody.firstChild);
+    }
+
     const canManage = currentWorkspaceRole === "owner" || currentWorkspaceRole === "admin";
 
     services.forEach((svc) => {
       const tr = document.createElement("tr");
 
-      // Rate display calculation
-      let rateDisplay = "--";
-      if (svc.trackingType === "metered") {
-        rateDisplay = `${escapeHtml(svc.currency)} ${escapeHtml(svc.unitPrice)} / ${escapeHtml(svc.unit || "unit")}`;
-      } else if (svc.trackingType === "subscription") {
-        rateDisplay = `${escapeHtml(svc.currency)} ${escapeHtml(svc.subscriptionAmount)} / ${escapeHtml(svc.billingInterval || "cycle")}`;
-      } else if (svc.trackingType === "hybrid") {
-        rateDisplay = `${escapeHtml(svc.currency)} ${escapeHtml(svc.subscriptionAmount)} / ${escapeHtml(svc.billingInterval || "cycle")} + ${escapeHtml(svc.currency)} ${escapeHtml(svc.unitPrice)} / ${escapeHtml(svc.unit || "unit")}`;
-      }
+      // 1. Service Name & Provider
+      const nameTd = document.createElement("td");
+      const nameDiv = document.createElement("div");
+      nameDiv.style.fontWeight = "600";
+      nameDiv.style.color = "var(--color-text-main)";
+      nameDiv.textContent = svc.name || "";
+      nameTd.appendChild(nameDiv);
 
+      if (svc.provider) {
+        const providerDiv = document.createElement("div");
+        providerDiv.style.fontSize = "0.775rem";
+        providerDiv.style.color = "var(--color-text-muted)";
+        providerDiv.textContent = svc.provider;
+        nameTd.appendChild(providerDiv);
+      }
+      tr.appendChild(nameTd);
+
+      // 2. Category
+      const catTd = document.createElement("td");
+      const catSpan = document.createElement("span");
+      catSpan.style.fontSize = "0.85rem";
+      catSpan.style.color = "var(--color-text-muted)";
+      catSpan.style.textTransform = "capitalize";
+      catSpan.textContent = svc.category || "general";
+      catTd.appendChild(catSpan);
+      tr.appendChild(catTd);
+
+      // 3. Tracking Type Badge
+      const typeTd = document.createElement("td");
+      const typeBadge = document.createElement("span");
       const typeBadgeClass =
         svc.trackingType === "metered"
           ? "badge-primary"
           : svc.trackingType === "subscription"
           ? "badge-info"
           : "badge-warning";
+      typeBadge.className = `badge ${typeBadgeClass}`;
+      typeBadge.textContent = svc.trackingType || "";
+      typeTd.appendChild(typeBadge);
+      tr.appendChild(typeTd);
 
-      const statusBadgeClass = svc.status === "active" ? "badge-success" : "badge-neutral";
+      // 4. Unit of Measure
+      const unitTd = document.createElement("td");
+      if (svc.unit) {
+        const unitBadge = document.createElement("span");
+        unitBadge.className = "badge badge-neutral";
+        unitBadge.textContent = svc.unit;
+        unitTd.appendChild(unitBadge);
+      } else {
+        const dashSpan = document.createElement("span");
+        dashSpan.style.color = "var(--color-text-muted)";
+        dashSpan.textContent = "--";
+        unitTd.appendChild(dashSpan);
+      }
+      tr.appendChild(unitTd);
 
-      tr.innerHTML = `
-        <td>
-          <div style="font-weight: 600; color: var(--color-text-main);">${escapeHtml(svc.name)}</div>
-          ${svc.provider ? `<div style="font-size: 0.775rem; color: var(--color-text-muted);">${escapeHtml(svc.provider)}</div>` : ""}
-        </td>
-        <td>
-          <span style="font-size: 0.85rem; color: var(--color-text-muted); text-transform: capitalize;">
-            ${escapeHtml(svc.category || "general")}
-          </span>
-        </td>
-        <td>
-          <span class="badge ${typeBadgeClass}">
-            ${escapeHtml(svc.trackingType)}
-          </span>
-        </td>
-        <td>
-          <span style="font-family: var(--font-mono); font-size: 0.85rem;">
-            ${rateDisplay}
-          </span>
-        </td>
-        <td>
-          <span style="font-weight: 500;">${escapeHtml(svc.currency)}</span>
-        </td>
-        <td>
-          <span class="badge ${statusBadgeClass}">
-            ${escapeHtml(svc.status)}
-          </span>
-        </td>
-        <td style="text-align: right; white-space: nowrap;">
-          <button class="btn btn-secondary btn-sm action-edit-btn" data-id="${svc.id}" ${canManage ? "" : "disabled title='Requires Admin or Owner role'"} style="margin-right: 4px;">
-            Edit
-          </button>
-          ${
-            svc.status === "active"
-              ? `<button class="btn btn-secondary btn-sm action-archive-btn" data-id="${svc.id}" data-name="${escapeHtml(svc.name)}" ${canManage ? "" : "disabled title='Requires Admin or Owner role'"} style="color: var(--color-danger);">Archive</button>`
-              : ""
-          }
-        </td>
-      `;
+      // 5. Billing Interval
+      const intervalTd = document.createElement("td");
+      if (svc.billingInterval) {
+        const intervalSpan = document.createElement("span");
+        intervalSpan.style.fontSize = "0.85rem";
+        intervalSpan.style.textTransform = "capitalize";
+        intervalSpan.textContent = svc.billingInterval;
+        intervalTd.appendChild(intervalSpan);
+      } else {
+        const dashSpan = document.createElement("span");
+        dashSpan.style.color = "var(--color-text-muted)";
+        dashSpan.textContent = "--";
+        intervalTd.appendChild(dashSpan);
+      }
+      tr.appendChild(intervalTd);
+
+      // 6. Pricing Rate
+      const priceTd = document.createElement("td");
+      const priceSpan = document.createElement("span");
+      priceSpan.style.fontFamily = "var(--font-mono)";
+      priceSpan.style.fontSize = "0.85rem";
+
+      if (svc.trackingType === "metered") {
+        priceSpan.textContent = `${svc.currency} ${svc.unitPrice} / ${svc.unit || "unit"}`;
+      } else if (svc.trackingType === "subscription") {
+        priceSpan.textContent = `${svc.currency} ${svc.subscriptionAmount} / ${svc.billingInterval || "cycle"}`;
+      } else if (svc.trackingType === "hybrid") {
+        priceSpan.textContent = `${svc.currency} ${svc.subscriptionAmount} / ${svc.billingInterval || "cycle"} + ${svc.currency} ${svc.unitPrice} / ${svc.unit || "unit"}`;
+      } else {
+        priceSpan.textContent = "--";
+      }
+      priceTd.appendChild(priceSpan);
+      tr.appendChild(priceTd);
+
+      // 7. Currency
+      const currTd = document.createElement("td");
+      const currSpan = document.createElement("span");
+      currSpan.style.fontWeight = "500";
+      currSpan.textContent = svc.currency || "";
+      currTd.appendChild(currSpan);
+      tr.appendChild(currTd);
+
+      // 8. Status Badge
+      const statusTd = document.createElement("td");
+      const statusBadge = document.createElement("span");
+      statusBadge.className = `badge ${svc.status === "active" ? "badge-success" : "badge-neutral"}`;
+      statusBadge.textContent = svc.status || "";
+      statusTd.appendChild(statusBadge);
+      tr.appendChild(statusTd);
+
+      // 9. Actions (Edit & Archive foundation)
+      const actionsTd = document.createElement("td");
+      actionsTd.style.textAlign = "right";
+      actionsTd.style.whiteSpace = "nowrap";
+
+      const editBtn = document.createElement("button");
+      editBtn.className = "btn btn-secondary btn-sm action-edit-btn";
+      editBtn.setAttribute("data-id", svc.id);
+      editBtn.style.marginRight = "4px";
+      editBtn.textContent = "Edit";
+      if (!canManage) {
+        editBtn.disabled = true;
+        editBtn.title = "Requires Admin or Owner role in this workspace";
+      }
+      editBtn.addEventListener("click", () => openEditModal(svc.id));
+      actionsTd.appendChild(editBtn);
+
+      if (svc.status === "active") {
+        const archiveBtn = document.createElement("button");
+        archiveBtn.className = "btn btn-secondary btn-sm action-archive-btn";
+        archiveBtn.setAttribute("data-id", svc.id);
+        archiveBtn.style.color = "var(--color-danger)";
+        archiveBtn.textContent = "Archive";
+        if (!canManage) {
+          archiveBtn.disabled = true;
+          archiveBtn.title = "Requires Admin or Owner role in this workspace";
+        }
+        archiveBtn.addEventListener("click", () => archiveServiceAction(svc.id, svc.name));
+        actionsTd.appendChild(archiveBtn);
+      }
+      tr.appendChild(actionsTd);
 
       tableBody.appendChild(tr);
-    });
-
-    // Attach row action listeners
-    tableBody.querySelectorAll(".action-edit-btn").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const id = btn.getAttribute("data-id");
-        openEditModal(id);
-      });
-    });
-
-    tableBody.querySelectorAll(".action-archive-btn").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const id = btn.getAttribute("data-id");
-        const name = btn.getAttribute("data-name");
-        archiveServiceAction(id, name);
-      });
     });
   }
 
