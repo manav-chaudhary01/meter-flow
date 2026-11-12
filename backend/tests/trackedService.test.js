@@ -345,5 +345,102 @@ describe("TrackedService Catalog API", () => {
         .set("Authorization", `Bearer ${ownerTokenB}`);
       assert.equal(delB.status, 404);
     });
+
+    it("should reject member role on PUT and DELETE (403) while allowing admin role full CRUD", async () => {
+      // Member cannot update or archive Tenant A's service
+      const memberPut = await request(app)
+        .put(`/api/services/${serviceIdA}`)
+        .set("Authorization", `Bearer ${memberTokenA}`)
+        .send({ name: "Unauthorized Edit" });
+      assert.equal(memberPut.status, 403);
+
+      const memberDel = await request(app)
+        .delete(`/api/services/${serviceIdA}`)
+        .set("Authorization", `Bearer ${memberTokenA}`);
+      assert.equal(memberDel.status, 403);
+
+      // Register and promote an Admin in Tenant A
+      await request(app).post("/api/auth/register").send({
+        name: "Dana Admin",
+        email: "dana@org-a.com",
+        password: "password123",
+        organizationName: "Dana Temp Org"
+      });
+
+      const addAdmin = await request(app)
+        .post(`/api/workspaces/${tenantAId}/members`)
+        .set("Authorization", `Bearer ${ownerTokenA}`)
+        .send({ email: "dana@org-a.com", role: "admin" });
+      assert.equal(addAdmin.status, 201);
+
+      const loginAdmin = await request(app).post("/api/auth/login").send({
+        email: "dana@org-a.com",
+        password: "password123"
+      });
+      const switchAdmin = await request(app)
+        .post("/api/workspaces/switch")
+        .set("Authorization", `Bearer ${loginAdmin.body.data.token}`)
+        .send({ workspaceId: tenantAId });
+      const adminTokenA = switchAdmin.body.data.token;
+
+      // Admin can create, update, and archive
+      const adminCreate = await request(app)
+        .post("/api/services")
+        .set("Authorization", `Bearer ${adminTokenA}`)
+        .send({
+          name: "Cloudflare Workers",
+          provider: "Cloudflare",
+          category: "edge",
+          trackingType: "subscription",
+          currency: "EUR",
+          subscriptionAmount: "5.00",
+          billingInterval: "monthly"
+        });
+      assert.equal(adminCreate.status, 201);
+      const adminServiceId = adminCreate.body.data.service.id;
+
+      const adminUpdate = await request(app)
+        .put(`/api/services/${adminServiceId}`)
+        .set("Authorization", `Bearer ${adminTokenA}`)
+        .send({ subscriptionAmount: "10.00", billingInterval: "yearly" });
+      assert.equal(adminUpdate.status, 200);
+      assert.equal(adminUpdate.body.data.service.subscriptionAmount, "10");
+      assert.equal(adminUpdate.body.data.service.billingInterval, "yearly");
+
+      const adminArchive = await request(app)
+        .delete(`/api/services/${adminServiceId}`)
+        .set("Authorization", `Bearer ${adminTokenA}`);
+      assert.equal(adminArchive.status, 200);
+      assert.equal(adminArchive.body.data.service.status, "archived");
+    });
+
+    it("should keep trackingType immutable, reject invalid update fields (400), and allow reactivation", async () => {
+      const badCurrency = await request(app)
+        .put(`/api/services/${serviceIdA}`)
+        .set("Authorization", `Bearer ${ownerTokenA}`)
+        .send({ currency: "BAD1" });
+      assert.equal(badCurrency.status, 400);
+      assert.match(badCurrency.body.message, /3-letter ISO code/i);
+
+      // Attempting to switch trackingType via PUT leaves existing type unchanged
+      const attemptTypeChange = await request(app)
+        .put(`/api/services/${serviceIdA}`)
+        .set("Authorization", `Bearer ${ownerTokenA}`)
+        .send({ trackingType: "subscription", name: "Stripe Metered" });
+      assert.equal(attemptTypeChange.status, 200);
+      assert.equal(attemptTypeChange.body.data.service.trackingType, "metered");
+
+      // Archive then reactivate via PUT status: active
+      await request(app)
+        .delete(`/api/services/${serviceIdA}`)
+        .set("Authorization", `Bearer ${ownerTokenA}`);
+
+      const reactivate = await request(app)
+        .put(`/api/services/${serviceIdA}`)
+        .set("Authorization", `Bearer ${ownerTokenA}`)
+        .send({ status: "active" });
+      assert.equal(reactivate.status, 200);
+      assert.equal(reactivate.body.data.service.status, "active");
+    });
   });
 });

@@ -167,6 +167,17 @@ select:focus-visible {
   text-decoration: none;
 }
 
+.btn-danger {
+  background-color: var(--color-danger);
+  color: #ffffff;
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-danger:hover:not(:disabled) {
+  background-color: #dc2626;
+  text-decoration: none;
+}
+
 .btn-sm {
   padding: 0.35rem 0.65rem;
   font-size: 0.8rem;
@@ -229,6 +240,13 @@ select:focus-visible {
 
 .form-input::placeholder {
   color: var(--color-text-light);
+}
+
+.form-input:disabled,
+.form-select:disabled {
+  background-color: #f1f5f9;
+  color: var(--color-text-muted);
+  cursor: not-allowed;
 }
 
 .password-input-wrapper {
@@ -340,6 +358,12 @@ select:focus-visible {
   background-color: var(--color-info-bg);
   color: var(--color-info-text);
   border-color: var(--color-info-border);
+}
+
+.badge-primary {
+  background-color: var(--color-primary-light);
+  color: var(--color-primary);
+  border-color: #c7d2fe;
 }
 
 .badge-neutral {

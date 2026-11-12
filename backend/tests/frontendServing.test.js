@@ -1,5 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import vm from "node:vm";
 import request from "supertest";
 import app from "../src/app.js";
 
@@ -56,21 +57,134 @@ describe("Frontend Static Serving & Security Boundaries", () => {
     assert.match(res.text, /initDashboard/);
   });
 
-  it("GET /services should serve services.html with 200 OK", async () => {
+  it("GET /services should serve services.html with 200 OK and CRUD modals", async () => {
     const res = await request(app).get("/services");
     assert.equal(res.status, 200);
     assert.match(res.headers["content-type"], /text\/html/);
     assert.match(res.text, /Tracked Services — MeterFlow/);
     assert.match(res.text, /id="services-table-body"/);
     assert.match(res.text, /id="create-service-form"/);
+    assert.match(res.text, /id="edit-service-form"/);
+    assert.match(res.text, /id="edit-tracking-type"[^>]*disabled/);
+    assert.match(res.text, /id="archive-modal"/);
+    assert.match(res.text, /id="archive-confirm-btn"/);
   });
 
-  it("GET /js/services.js should serve the services controller with application/javascript", async () => {
+  it("GET /js/services.js should serve the services controller with safe DOM & valid CRUD helpers", async () => {
     const res = await request(app).get("/js/services.js");
     assert.equal(res.status, 200);
     assert.match(res.headers["content-type"], /javascript/);
     assert.match(res.text, /initServicesPage/);
     assert.match(res.text, /renderServicesTable/);
+    assert.match(res.text, /openEditModal/);
+    assert.match(res.text, /openArchiveModal/);
+    assert.doesNotMatch(res.text, /\.innerHTML\s*=/);
+    assert.doesNotMatch(res.text, /\bwindow\.confirm\s*\(/);
+    assert.doesNotMatch(res.text, /\bwindow\.alert\s*\(/);
+
+    // Execute served frontend controller in isolated VM context to test pure CRUD helpers directly
+    const sandbox = { window: {} };
+    vm.runInNewContext(res.text, sandbox);
+    const helpers = sandbox.window.MeterFlowServices;
+    assert.ok(helpers, "MeterFlowServices helpers should be exposed");
+
+    assert.equal(helpers.canManageWorkspace("owner"), true);
+    assert.equal(helpers.canManageWorkspace("admin"), true);
+    assert.equal(helpers.canManageWorkspace("member"), false);
+
+    // Client-side validation checks matching backend rules
+    const missingName = helpers.validateServiceForm("create", {
+      name: " ",
+      trackingType: "metered",
+      currency: "USD",
+      unit: "requests",
+      unitPrice: "0.01"
+    });
+    assert.match(missingName.error, /Service name is required/);
+
+    const badCurrency = helpers.validateServiceForm("create", {
+      name: "Vector DB",
+      trackingType: "metered",
+      currency: "U1",
+      unit: "GB",
+      unitPrice: "0.10"
+    });
+    assert.match(badCurrency.error, /3-letter ISO code/);
+
+    const badPrice = helpers.validateServiceForm("create", {
+      name: "Vector DB",
+      trackingType: "metered",
+      currency: "USD",
+      unit: "GB",
+      unitPrice: "-0.5"
+    });
+    assert.match(badPrice.error, /non-negative/);
+
+    const nonNumericPrice = helpers.validateServiceForm("create", {
+      name: "Vector DB",
+      trackingType: "metered",
+      currency: "USD",
+      unit: "GB",
+      unitPrice: "abc"
+    });
+    assert.match(nonNumericPrice.error, /valid numeric decimal/);
+
+    const validHybrid = helpers.validateServiceForm("create", {
+      name: "Managed Postgres",
+      trackingType: "hybrid",
+      currency: "eur",
+      unit: "GB-hours",
+      unitPrice: "0.00025",
+      subscriptionAmount: "0",
+      billingInterval: "monthly"
+    });
+    assert.equal(validHybrid.valid, true);
+
+    const meteredPayload = helpers.buildServicePayload("create", {
+      name: " Inference API ",
+      provider: " OpenAI ",
+      category: "",
+      trackingType: "metered",
+      currency: "usd",
+      unit: " 1k-tokens ",
+      unitPrice: "0.0300",
+      subscriptionAmount: "99.00",
+      billingInterval: "monthly"
+    });
+    assert.equal(meteredPayload.name, "Inference API");
+    assert.equal(meteredPayload.category, "general");
+    assert.equal(meteredPayload.currency, "USD");
+    assert.equal(meteredPayload.unit, "1k-tokens");
+    assert.equal(meteredPayload.unitPrice, "0.0300");
+    assert.equal("subscriptionAmount" in meteredPayload, false);
+    assert.equal("billingInterval" in meteredPayload, false);
+
+    const editPayload = helpers.buildServicePayload(
+      "edit",
+      {
+        name: "Updated API",
+        provider: "Anthropic",
+        category: "ai",
+        currency: "usd",
+        status: "active",
+        unit: "tokens",
+        unitPrice: "0"
+      },
+      "metered"
+    );
+    assert.equal("trackingType" in editPayload, false);
+    assert.equal(editPayload.status, "active");
+    assert.equal(editPayload.unitPrice, "0");
+
+    assert.equal(
+      helpers.formatPricingRate({
+        trackingType: "metered",
+        currency: "USD",
+        unitPrice: "0",
+        unit: "requests"
+      }),
+      "USD 0 / requests"
+    );
   });
 
   it("GET /usage should serve usage.html with 200 OK", async () => {
