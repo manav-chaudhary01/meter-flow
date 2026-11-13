@@ -227,7 +227,7 @@
         <h3 id="generate-modal-title">Generate Billing Record</h3>
         <button type="button" class="modal-close-btn" data-close-modal="generate-modal" aria-label="Close dialog">&times;</button>
       </div>
-      <form id="generate-bill-form">
+      <form id="generate-bill-form" novalidate>
         <div class="modal-body">
           <div id="generate-modal-error" class="alert alert-error" style="display: none;" role="alert"></div>
 
@@ -305,6 +305,7 @@
         </div>
       </div>
       <div class="modal-footer">
+        <button type="button" id="details-view-usage-btn" class="btn btn-secondary">Audit Reconciled Usage</button>
         <button type="button" class="btn btn-secondary" data-close-modal="details-modal">Close</button>
       </div>
     </div>

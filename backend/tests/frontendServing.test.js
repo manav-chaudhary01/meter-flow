@@ -328,13 +328,96 @@ describe("Frontend Static Serving & Security Boundaries", () => {
     assert.ok(validRange.endDateISO.startsWith("2026-10-15T23:59:59"));
   });
 
-  it("GET /billing should serve billing.html with 200 OK", async () => {
+  it("GET /billing should serve billing.html with 200 OK, metric cards, and modals", async () => {
     const res = await request(app).get("/billing");
     assert.equal(res.status, 200);
     assert.match(res.headers["content-type"], /text\/html/);
     assert.match(res.text, /Invoices & Billing — MeterFlow/);
     assert.match(res.text, /id="billing-table-body"/);
     assert.match(res.text, /id="generate-bill-form"/);
+    assert.match(res.text, /id="metric-invoice-count"/);
+    assert.match(res.text, /id="metric-total-invoiced"/);
+    assert.match(res.text, /id="metric-billing-currency"/);
+    assert.match(res.text, /id="generate-modal"/);
+    assert.match(res.text, /id="details-modal"/);
+    assert.match(res.text, /id="usage-modal"/);
+    assert.match(res.text, /id="details-view-usage-btn"/);
+  });
+
+  it("GET /js/billing.js should serve the billing controller with safe DOM & valid pure helpers", async () => {
+    const res = await request(app).get("/js/billing.js");
+    assert.equal(res.status, 200);
+    assert.match(res.headers["content-type"], /javascript/);
+    assert.match(res.text, /initBillingPage/);
+    assert.match(res.text, /renderBillingTable/);
+    assert.match(res.text, /openDetailsModal/);
+    assert.match(res.text, /openReconciledUsageModal/);
+    assert.doesNotMatch(res.text, /\.innerHTML\s*=/);
+    assert.doesNotMatch(res.text, /\bwindow\.confirm\s*\(/);
+    assert.doesNotMatch(res.text, /\bwindow\.alert\s*\(/);
+
+    // Run in isolated VM to verify pure validation, formatting, and payload helpers
+    const sandbox = { window: {} };
+    vm.runInNewContext(res.text, sandbox);
+    const helpers = sandbox.window.MeterFlowBilling;
+    assert.ok(helpers, "MeterFlowBilling helpers should be exposed on window");
+
+    // 1. RBAC permissions
+    assert.equal(helpers.canGenerateBilling("owner"), true);
+    assert.equal(helpers.canGenerateBilling("admin"), true);
+    assert.equal(helpers.canGenerateBilling("member"), false);
+    assert.equal(helpers.canGenerateBilling("viewer"), false);
+
+    // 2. Monetary & date formatting
+    assert.equal(helpers.formatCurrency("1250.50", "USD"), "USD 1,250.50");
+    assert.equal(helpers.formatCurrency("0", "USD"), "USD 0.00");
+    assert.equal(helpers.formatCurrency(null, "EUR"), "EUR 0.00");
+    assert.equal(helpers.formatDateTime(""), "--");
+    assert.equal(helpers.formatDateOnly(""), "--");
+
+    // 3. Form validation
+    assert.match(
+      helpers.validateGenerateForm({ billingPeriodStart: "", billingPeriodEnd: "2026-10-31", currency: "USD" }).error,
+      /start date is required/i
+    );
+    assert.match(
+      helpers.validateGenerateForm({ billingPeriodStart: "2026-10-01", billingPeriodEnd: "", currency: "USD" }).error,
+      /end date is required/i
+    );
+    assert.match(
+      helpers.validateGenerateForm({ billingPeriodStart: "invalid", billingPeriodEnd: "2026-10-31", currency: "USD" }).error,
+      /invalid format/i
+    );
+    assert.match(
+      helpers.validateGenerateForm({ billingPeriodStart: "2026-10-31", billingPeriodEnd: "2026-10-01", currency: "USD" }).error,
+      /strictly before/i
+    );
+    assert.match(
+      helpers.validateGenerateForm({ billingPeriodStart: "2026-10-01", billingPeriodEnd: "2026-10-31", currency: "US" }).error,
+      /3-letter ISO code/i
+    );
+    assert.equal(
+      helpers.validateGenerateForm({ billingPeriodStart: "2026-10-01T00:00:00Z", billingPeriodEnd: "2026-10-31T23:59:59Z", currency: "usd" }).valid,
+      true
+    );
+
+    // 4. Payload construction
+    const payload = helpers.buildGeneratePayload({
+      billingPeriodStart: "2026-10-01T00:00:00.000Z",
+      billingPeriodEnd: "2026-10-31T23:59:59.999Z",
+      currency: "usd"
+    });
+    assert.equal(payload.billingPeriodStart, "2026-10-01T00:00:00.000Z");
+    assert.equal(payload.billingPeriodEnd, "2026-10-31T23:59:59.999Z");
+    assert.equal(payload.currency, "USD");
+
+    // 5. Date filter range parser
+    const badRange = helpers.parseDateFilterRange("2026-10-31", "2026-10-01");
+    assert.match(badRange.error, /cannot be after/);
+
+    const validRange = helpers.parseDateFilterRange("2026-10-01", "2026-10-31");
+    assert.ok(validRange.startDateISO.startsWith("2026-10-01"));
+    assert.ok(validRange.endDateISO.startsWith("2026-10-31T23:59:59"));
   });
 
   it("GET /budgets should serve budgets.html with 200 OK", async () => {
