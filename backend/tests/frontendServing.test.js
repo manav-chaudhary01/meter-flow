@@ -187,13 +187,145 @@ describe("Frontend Static Serving & Security Boundaries", () => {
     );
   });
 
-  it("GET /usage should serve usage.html with 200 OK", async () => {
+  it("GET /usage should serve usage.html with 200 OK, metric cards, and modals", async () => {
     const res = await request(app).get("/usage");
     assert.equal(res.status, 200);
     assert.match(res.headers["content-type"], /text\/html/);
     assert.match(res.text, /Usage Ingestion & History — MeterFlow/);
     assert.match(res.text, /id="ingest-usage-form"/);
     assert.match(res.text, /id="usage-table-body"/);
+    assert.match(res.text, /id="metric-total-events"/);
+    assert.match(res.text, /id="metric-aggregate-volume"/);
+    assert.match(res.text, /id="metric-distinct-services"/);
+    assert.match(res.text, /id="filter-service"/);
+    assert.match(res.text, /id="filter-start-date"/);
+    assert.match(res.text, /id="filter-end-date"/);
+    assert.match(res.text, /id="ingest-idempotency-key"/);
+    assert.match(res.text, /id="generate-key-btn"/);
+    assert.match(res.text, /id="metadata-modal"/);
+  });
+
+  it("GET /js/usage.js should serve the usage controller with safe DOM & valid ingestion helpers", async () => {
+    const res = await request(app).get("/js/usage.js");
+    assert.equal(res.status, 200);
+    assert.match(res.headers["content-type"], /javascript/);
+    assert.match(res.text, /initUsagePage/);
+    assert.match(res.text, /renderUsageTable/);
+    assert.match(res.text, /loadUsageSummary/);
+    assert.match(res.text, /buildIngestPayload/);
+    assert.doesNotMatch(res.text, /\.innerHTML\s*=/);
+
+    // Run in isolated VM to verify pure validation and payload helpers
+    const sandbox = { window: {} };
+    vm.runInNewContext(res.text, sandbox);
+    const helpers = sandbox.window.MeterFlowUsage;
+    assert.ok(helpers, "MeterFlowUsage helpers should be exposed on window");
+
+    // 1. Quantity validation
+    assert.match(helpers.validateQuantity("").error, /Quantity is required/);
+    assert.match(helpers.validateQuantity("-5").error, /non-negative/);
+    assert.match(helpers.validateQuantity("abc").error, /valid numeric decimal/);
+    assert.equal(helpers.validateQuantity("0").value, "0");
+    assert.equal(helpers.validateQuantity("1500.50").value, "1500.50");
+
+    // 2. Metadata validation
+    assert.equal(helpers.validateMetadata("").value, null);
+    assert.equal(helpers.validateMetadata("   ").value, null);
+    const parsedMeta = helpers.validateMetadata('{"endpoint": "/chat", "model": "gemini"}').value;
+    assert.equal(parsedMeta.endpoint, "/chat");
+    assert.equal(parsedMeta.model, "gemini");
+    assert.match(helpers.validateMetadata('["not", "an", "object"]').error, /key-value JSON object/);
+    assert.match(helpers.validateMetadata('{bad json').error, /Invalid JSON format/);
+
+    // 3. Form validation
+    const testMeteredService = {
+      id: "673f91000000000000000001",
+      name: "Claude Tokens",
+      trackingType: "metered",
+      unit: "tokens",
+      status: "active"
+    };
+
+    const testSubService = {
+      id: "673f91000000000000000002",
+      name: "GitHub Copilot",
+      trackingType: "subscription",
+      status: "active"
+    };
+
+    const testArchivedService = {
+      id: "673f91000000000000000003",
+      name: "Old Search API",
+      trackingType: "metered",
+      unit: "queries",
+      status: "archived"
+    };
+
+    assert.match(
+      helpers.validateIngestForm({ serviceId: "" }, null).error,
+      /select a tracked service/
+    );
+
+    assert.match(
+      helpers.validateIngestForm({ serviceId: testArchivedService.id }, testArchivedService).error,
+      /archived service/
+    );
+
+    assert.match(
+      helpers.validateIngestForm({ serviceId: testSubService.id }, testSubService).error,
+      /subscription-only/
+    );
+
+    assert.match(
+      helpers.validateIngestForm(
+        { serviceId: testMeteredService.id, quantity: "100", unit: "megabytes" },
+        testMeteredService
+      ).error,
+      /Unit mismatch/
+    );
+
+    const validCheck = helpers.validateIngestForm(
+      {
+        serviceId: testMeteredService.id,
+        quantity: "5000",
+        unit: "tokens",
+        source: "backend-worker",
+        idempotencyKey: "evt-test-123",
+        metadata: '{"model": "opus"}'
+      },
+      testMeteredService
+    );
+    assert.equal(validCheck.valid, true);
+
+    // 4. Payload builder
+    const payload = helpers.buildIngestPayload(
+      {
+        serviceId: testMeteredService.id,
+        quantity: " 5000 ",
+        unit: "tokens",
+        source: "api-agent",
+        occurredAt: "2026-10-30T10:00:00.000Z",
+        idempotencyKey: " key-123 ",
+        externalEventId: " ext-987 ",
+        metadata: '{"cost": 0.05}'
+      },
+      testMeteredService
+    );
+    assert.equal(payload.serviceId, testMeteredService.id);
+    assert.equal(payload.quantity, "5000");
+    assert.equal(payload.unit, "tokens");
+    assert.equal(payload.source, "api-agent");
+    assert.equal(payload.idempotencyKey, "key-123");
+    assert.equal(payload.externalEventId, "ext-987");
+    assert.equal(payload.metadata.cost, 0.05);
+
+    // 5. Date filter range parser
+    const badRange = helpers.parseDateFilterRange("2026-10-20", "2026-10-10");
+    assert.match(badRange.error, /cannot be after/);
+
+    const validRange = helpers.parseDateFilterRange("2026-10-01", "2026-10-15");
+    assert.ok(validRange.startDateISO.startsWith("2026-10-01"));
+    assert.ok(validRange.endDateISO.startsWith("2026-10-15T23:59:59"));
   });
 
   it("GET /billing should serve billing.html with 200 OK", async () => {

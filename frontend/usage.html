@@ -223,7 +223,7 @@
         <h3 id="ingest-modal-title">Ingest Usage Event</h3>
         <button type="button" class="modal-close-btn" data-close-modal="ingest-modal" aria-label="Close dialog">&times;</button>
       </div>
-      <form id="ingest-usage-form">
+      <form id="ingest-usage-form" novalidate>
         <div class="modal-body">
           <div id="ingest-modal-error" class="alert alert-error" style="display: none;" role="alert"></div>
           <div id="ingest-modal-replay" class="alert alert-info" style="display: none;" role="status"></div>
@@ -233,17 +233,19 @@
             <select id="ingest-service" class="form-select" required>
               <option value="">Select a metered/hybrid service...</option>
             </select>
-            <span id="service-unit-hint" class="form-hint">Unit will be matched automatically.</span>
+            <span id="service-unit-hint" class="form-hint">Unit will be matched automatically from selected service.</span>
           </div>
 
           <div class="form-row">
             <div class="form-group">
               <label for="ingest-quantity" class="form-label">Quantity *</label>
-              <input type="number" id="ingest-quantity" class="form-input" required min="0" step="any" placeholder="e.g. 150">
+              <input type="text" inputmode="decimal" id="ingest-quantity" class="form-input" required placeholder="e.g. 150 or 0.05">
+              <span class="form-hint">Non-negative decimal number (&ge; 0).</span>
             </div>
             <div class="form-group">
               <label for="ingest-unit" class="form-label">Unit *</label>
-              <input type="text" id="ingest-unit" class="form-input" required placeholder="e.g. requests" readonly style="background-color: var(--color-bg-body);">
+              <input type="text" id="ingest-unit" class="form-input" required placeholder="Auto-populated" readonly style="background-color: var(--color-bg-body);">
+              <span class="form-hint">Configured service ingestion unit.</span>
             </div>
           </div>
 
@@ -251,11 +253,12 @@
             <div class="form-group">
               <label for="ingest-occurred-at" class="form-label">Occurred At</label>
               <input type="datetime-local" id="ingest-occurred-at" class="form-input">
-              <span class="form-hint">Leave blank for current server time</span>
+              <span class="form-hint">Leave blank for current server timestamp.</span>
             </div>
             <div class="form-group">
               <label for="ingest-source" class="form-label">Source</label>
               <input type="text" id="ingest-source" class="form-input" value="manual-ui" maxlength="100">
+              <span class="form-hint">Event origin or ingestion agent identifier.</span>
             </div>
           </div>
 
@@ -266,13 +269,14 @@
                 Generate Key
               </button>
             </div>
-            <input type="text" id="ingest-idempotency-key" class="form-input" placeholder="e.g. evt-20261101-9f82a1" maxlength="200">
-            <span class="form-hint">Ensures duplicate API calls with identical payloads do not double-count usage.</span>
+            <input type="text" id="ingest-idempotency-key" class="form-input" placeholder="e.g. evt-20261113-9f82a1" maxlength="200">
+            <span class="form-hint">Unique key preventing duplicate ingestion on network retries.</span>
           </div>
 
           <div class="form-group">
             <label for="ingest-external-event-id" class="form-label">External Event ID</label>
-            <input type="text" id="ingest-external-event-id" class="form-input" placeholder="Optional 3rd-party provider event ID" maxlength="200">
+            <input type="text" id="ingest-external-event-id" class="form-input" placeholder="Optional upstream provider event ID" maxlength="200">
+            <span class="form-hint">Upstream payment or telemetry identifier (scoped per service).</span>
           </div>
 
           <div class="form-group">
