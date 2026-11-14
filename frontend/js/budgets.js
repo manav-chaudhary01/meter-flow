@@ -382,6 +382,17 @@
             currentWorkspaceRole = switchRes.data.workspace.role || "member";
             applyRolePermissions(currentWorkspaceRole);
 
+            // Close any open modals & reset modal targets
+            closeModal("create-budget-modal");
+            closeModal("edit-budget-modal");
+            closeModal("deactivate-budget-modal");
+            activeEditBudget = null;
+            pendingDeactivateBudget = null;
+
+            // Reset alert filter
+            const alertFilter = document.getElementById("filter-alert-status");
+            if (alertFilter) alertFilter.value = "active";
+
             // Clear previous workspace state before loading new workspace data
             cachedBudgets = [];
             clearBudgetsContainer();
@@ -397,6 +408,11 @@
         }
       });
     }
+  }
+
+  function closeModal(modalId) {
+    const modal = document.getElementById(modalId);
+    if (modal) modal.classList.remove("open");
   }
 
   function applyRolePermissions(role) {
@@ -1104,7 +1120,7 @@
       const res = await api.post(`/api/budgets/${budgetId}/evaluate`);
       if (res.success && res.data) {
         const newCount = Array.isArray(res.data.newAlerts) ? res.data.newAlerts.length : 0;
-        showGlobalSuccess(`Evaluation complete: ${newCount} new alert(s) triggered.`);
+        showGlobalSuccess(`Evaluation complete: ${newCount} new alert records triggered.`);
         await loadBudgets();
         await loadAlerts();
       }

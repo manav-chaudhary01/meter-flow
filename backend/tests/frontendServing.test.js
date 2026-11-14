@@ -50,11 +50,107 @@ describe("Frontend Static Serving & Security Boundaries", () => {
     assert.match(res.text, /MeterFlowAuth/);
   });
 
-  it("GET /js/dashboard.js should serve the dashboard controller with application/javascript", async () => {
+  it("GET /js/dashboard.js should serve the dashboard controller with safe DOM & valid pure helpers", async () => {
     const res = await request(app).get("/js/dashboard.js");
     assert.equal(res.status, 200);
     assert.match(res.headers["content-type"], /javascript/);
     assert.match(res.text, /initDashboard/);
+    assert.match(res.text, /renderSummaryCards/);
+    assert.match(res.text, /renderInvoicesTable/);
+    assert.match(res.text, /renderBudgetsList/);
+    assert.match(res.text, /renderAlertsList/);
+    assert.doesNotMatch(res.text, /\.innerHTML\s*=/);
+    assert.doesNotMatch(res.text, /\.outerHTML\s*=/);
+    assert.doesNotMatch(res.text, /\bwindow\.confirm\s*\(/);
+    assert.doesNotMatch(res.text, /\bwindow\.alert\s*\(/);
+
+    // Run in isolated VM to verify pure validation, spend calculation, and formatting helpers
+    const sandbox = { window: {} };
+    vm.runInNewContext(res.text, sandbox);
+    const helpers = sandbox.window.MeterFlowDashboard;
+    assert.ok(helpers, "MeterFlowDashboard helpers should be exposed on window");
+
+    // 1. RBAC permissions
+    assert.equal(helpers.canManage("owner"), true);
+    assert.equal(helpers.canManage("admin"), true);
+    assert.equal(helpers.canManage("member"), false);
+    assert.equal(helpers.canManage("viewer"), false);
+
+    // 2. Currency & Date formatting
+    assert.match(helpers.formatCurrency("1250.50", "USD"), /1,250\.50/);
+    assert.match(helpers.formatCurrency("0.00", "USD"), /0\.00/);
+    assert.equal(helpers.formatDate(""), "N/A");
+    assert.match(helpers.formatDate("2026-11-01T00:00:00.000Z"), /Nov 1, 2026/);
+    assert.equal(helpers.formatPeriod("", ""), "N/A");
+    assert.match(helpers.formatPeriod("2026-11-01T12:00:00.000Z", "2026-11-20T12:00:00.000Z"), /Nov 1, 2026.*–.*Nov 20, 2026/);
+
+    // 3. Precise spend calculation
+    const spend = helpers.calculateTotalSpend([
+      { total: "100.25", currency: "USD" },
+      { total: "50.75", currency: "USD" },
+      { total: "200.00", currency: "USD" }
+    ]);
+    assert.equal(spend.total, "351.00");
+    assert.equal(spend.currency, "USD");
+    assert.equal(spend.count, 3);
+
+    // Empty records check
+    const emptySpend = helpers.calculateTotalSpend([]);
+    assert.equal(emptySpend.total, "0.00");
+    assert.equal(emptySpend.count, 0);
+
+    // 4. Metric counts
+    const svcs = helpers.countActiveServices([
+      { status: "active", trackingType: "metered" },
+      { status: "active", trackingType: "subscription" },
+      { status: "archived", trackingType: "metered" }
+    ]);
+    assert.equal(svcs.total, 2);
+    assert.equal(svcs.metered, 1);
+    assert.equal(svcs.subscription, 1);
+
+    const activeBudgets = helpers.countActiveBudgets([
+      { status: "active" },
+      { status: "active" },
+      { status: "archived" }
+    ]);
+    assert.equal(activeBudgets, 2);
+
+    const activeAlerts = helpers.countActiveAlerts([
+      { status: "active" },
+      { status: "acknowledged" }
+    ]);
+    assert.equal(activeAlerts, 1);
+
+    // 5. Visual classes & badges
+    assert.equal(helpers.buildProgressClass(45), "fill-safe");
+    assert.equal(helpers.buildProgressClass(85), "fill-warning");
+    assert.equal(helpers.buildProgressClass(110), "fill-danger");
+
+    assert.equal(helpers.buildInvoiceStatusBadge("finalized").className, "badge badge-success");
+    assert.equal(helpers.buildInvoiceStatusBadge("issued").className, "badge badge-warning");
+    assert.equal(helpers.buildInvoiceStatusBadge("void").className, "badge badge-danger");
+
+    const reachedBadge = helpers.buildAlertBadge({ alertType: "threshold_reached", threshold: 80 });
+    assert.equal(reachedBadge.className, "badge badge-warning");
+    assert.match(reachedBadge.text, /80% REACHED/);
+
+    const exceededBadge = helpers.buildAlertBadge({ alertType: "threshold_exceeded", threshold: 100 });
+    assert.equal(exceededBadge.className, "badge badge-danger");
+    assert.match(exceededBadge.text, /100% EXCEEDED/);
+
+    // 6. Forecast text builder
+    const onTrackText = helpers.buildForecastText({
+      currency: "USD",
+      forecast: { hasSufficientData: true, isProjectedToExceed: false, forecastSpend: "450.00" }
+    });
+    assert.match(onTrackText, /On track/);
+
+    const overrunText = helpers.buildForecastText({
+      currency: "USD",
+      forecast: { hasSufficientData: true, isProjectedToExceed: true, forecastSpend: "1200.00" }
+    });
+    assert.match(overrunText, /Projected to reach/);
   });
 
   it("GET /services should serve services.html with 200 OK and CRUD modals", async () => {
@@ -579,5 +675,35 @@ describe("Frontend Static Serving & Security Boundaries", () => {
 
     const packageRes = await request(app).get("/package.json");
     assert.equal(packageRes.status, 404);
+  });
+
+  it("all frontend JS modules should have zero unsafe innerHTML, outerHTML, window.alert, or window.confirm", async () => {
+    const modules = ["api.js", "auth.js", "dashboard.js", "services.js", "usage.js", "billing.js", "budgets.js"];
+    for (const mod of modules) {
+      const res = await request(app).get(`/js/${mod}`);
+      assert.equal(res.status, 200, `Failed fetching /js/${mod}`);
+      assert.doesNotMatch(res.text, /\.innerHTML\s*=/, `unsafe innerHTML assignment detected in /js/${mod}`);
+      assert.doesNotMatch(res.text, /\.outerHTML\s*=/, `unsafe outerHTML assignment detected in /js/${mod}`);
+      assert.doesNotMatch(res.text, /\bwindow\.alert\s*\(/, `window.alert detected in /js/${mod}`);
+      assert.doesNotMatch(res.text, /\balert\s*\(/, `alert() call detected in /js/${mod}`);
+      assert.doesNotMatch(res.text, /\bwindow\.confirm\s*\(/, `window.confirm detected in /js/${mod}`);
+      assert.doesNotMatch(res.text, /\bconfirm\s*\(/, `confirm() call detected in /js/${mod}`);
+    }
+  });
+
+  it("all authenticated HTML pages should include consistent header, user profile, and workspace switching elements", async () => {
+    const pages = ["/", "/services", "/usage", "/billing", "/budgets"];
+    for (const page of pages) {
+      const res = await request(app).get(page);
+      assert.equal(res.status, 200, `Failed fetching ${page}`);
+      assert.match(res.text, /id="workspace-select"/, `workspace-select missing in ${page}`);
+      assert.match(res.text, /id="workspace-role-badge"/, `workspace-role-badge missing in ${page}`);
+      assert.match(res.text, /id="header-user-name"/, `header-user-name missing in ${page}`);
+      assert.match(res.text, /id="header-user-role"/, `header-user-role missing in ${page}`);
+      assert.match(res.text, /id="logout-btn"/, `logout-btn missing in ${page}`);
+      assert.match(res.text, /id="mobile-menu-btn"/, `mobile-menu-btn missing in ${page}`);
+      assert.match(res.text, /class="sidebar"/, `sidebar missing in ${page}`);
+      assert.match(res.text, /class="sidebar-nav"/, `sidebar-nav missing in ${page}`);
+    }
   });
 });

@@ -112,10 +112,14 @@
       function setSubmitting(isSubmitting) {
         if (!submitBtn) return;
         submitBtn.disabled = isSubmitting;
+        submitBtn.textContent = "";
         if (isSubmitting) {
-          submitBtn.innerHTML = '<span class="btn-spinner"></span> Signing in...';
+          const spinner = document.createElement("span");
+          spinner.className = "btn-spinner";
+          submitBtn.appendChild(spinner);
+          submitBtn.appendChild(document.createTextNode(" Signing in..."));
         } else {
-          submitBtn.innerHTML = "Sign In";
+          submitBtn.textContent = "Sign In";
         }
       }
     },
@@ -202,10 +206,14 @@
       function setSubmitting(isSubmitting) {
         if (!submitBtn) return;
         submitBtn.disabled = isSubmitting;
+        submitBtn.textContent = "";
         if (isSubmitting) {
-          submitBtn.innerHTML = '<span class="btn-spinner"></span> Creating Account...';
+          const spinner = document.createElement("span");
+          spinner.className = "btn-spinner";
+          submitBtn.appendChild(spinner);
+          submitBtn.appendChild(document.createTextNode(" Creating Account..."));
         } else {
-          submitBtn.innerHTML = "Create Account";
+          submitBtn.textContent = "Create Account";
         }
       }
     }

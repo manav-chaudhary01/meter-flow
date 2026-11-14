@@ -140,10 +140,19 @@
 
       // Handle session expiration (HTTP 401 Unauthorized)
       if (response.status === 401) {
-        const currentPath = window.location.pathname;
-        const isAuthPage = currentPath.endsWith("login.html") || currentPath.endsWith("register.html");
+        const currentPath = (window.location.pathname || "").toLowerCase();
+        const isAuthEndpoint =
+          typeof endpoint === "string" &&
+          (endpoint.startsWith("/api/auth/login") || endpoint.startsWith("/api/auth/register"));
+        const isAuthPage =
+          currentPath.endsWith("login.html") ||
+          currentPath.endsWith("register.html") ||
+          currentPath.endsWith("/login") ||
+          currentPath.endsWith("/register") ||
+          currentPath === "/login" ||
+          currentPath === "/register";
 
-        if (!isAuthPage) {
+        if (!isAuthPage && !isAuthEndpoint) {
           this.clearSession();
           window.location.href = "login.html?expired=true";
           const err = new Error("Session expired. Please sign in again.");

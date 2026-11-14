@@ -439,6 +439,12 @@
           if (filterStart) filterStart.value = "";
           if (filterEnd) filterEnd.value = "";
 
+          // Clear cached state before loading fresh workspace data
+          cachedRecords = [];
+          workspaceServices = [];
+          const tableBody = document.getElementById("usage-table-body");
+          if (tableBody) clearElement(tableBody);
+
           // Reload workspace data
           await loadServicesCatalog();
           await loadUsageSummary();

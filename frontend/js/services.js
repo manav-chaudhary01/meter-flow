@@ -358,9 +358,25 @@
           currentWorkspaceRole = switchRes.data.workspace.role || "member";
           applyRolePermissions(currentWorkspaceRole);
 
+          // Close all open modals & reset modal states
           closeModal("create-modal");
           closeModal("edit-modal");
           closeModal("archive-modal");
+          activeEditService = null;
+          pendingArchiveService = null;
+
+          // Reset filters to defaults on workspace switch
+          const statusSelect = document.getElementById("filter-status");
+          const typeSelect = document.getElementById("filter-type");
+          const categoryInput = document.getElementById("filter-category");
+          if (statusSelect) statusSelect.value = "active";
+          if (typeSelect) typeSelect.value = "";
+          if (categoryInput) categoryInput.value = "";
+
+          // Clear cached state before loading fresh workspace data
+          cachedServices = [];
+          const tableBody = document.getElementById("services-table-body");
+          if (tableBody) clearElement(tableBody);
 
           await loadServices(true);
         }

@@ -295,8 +295,22 @@
             currentWorkspaceRole = switchRes.data.workspace.role || "member";
             applyRolePermissions(currentWorkspaceRole);
 
+            // Close any open modals
+            closeModal("generate-modal");
+            closeModal("invoice-details-modal");
+            closeModal("reconciled-usage-modal");
+
+            // Reset filters
+            const filterStatus = document.getElementById("filter-billing-status");
+            const filterStart = document.getElementById("filter-billing-start");
+            const filterEnd = document.getElementById("filter-billing-end");
+            if (filterStatus) filterStatus.value = "";
+            if (filterStart) filterStart.value = "";
+            if (filterEnd) filterEnd.value = "";
+
             // Clear previous workspace state before loading new workspace data
             cachedBills = [];
+            activeInvoice = null;
             clearTable();
             await loadBillingRecords(1);
           }
@@ -307,6 +321,11 @@
         }
       });
     }
+  }
+
+  function closeModal(modalId) {
+    const modal = document.getElementById(modalId);
+    if (modal) modal.classList.remove("open");
   }
 
   function applyRolePermissions(role) {
