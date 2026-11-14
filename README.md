@@ -42,7 +42,7 @@ meter-flow/
 │   │   ├── routes/              # Express API route modules
 │   │   ├── services/            # Pure calculation & evaluation engines (billingCalculator, spendCalculator, spendForecaster, alertEvaluator)
 │   │   └── utils/               # Migration & workspace backfill utilities
-│   └── tests/                   # Automated unit & integration test suite (160 tests across 46 suites)
+│   └── tests/                   # Automated unit & integration test suite (161 tests across 46 suites)
 │       ├── helpers/db.js        # In-memory test database runner
 │       ├── health.test.js       # Health check & 404 tests
 │       ├── auth.test.js         # Authentication tests
@@ -53,7 +53,7 @@ meter-flow/
 │       ├── budgets.test.js      # Budget CRUD, actual spend, threshold alerts & forecasting tests
 │       ├── reliability.test.js  # Milestone F reliability, reconciliation & operational tests
 │       ├── e2eWorkflow.test.js  # Milestone G 15-step end-to-end integration lifecycle tests
-│       ├── frontendServing.test.js # Frontend static serving, routing & security boundary tests (18 tests)
+│       ├── frontendServing.test.js # Frontend static serving, routing & security boundary tests (19 tests)
 │       ├── resource.test.js     # Resource CRUD tests
 │       ├── tenantIsolation.test.js # Multi-tenant isolation tests
 │       └── migration.test.js    # Idempotent migration verification
@@ -135,7 +135,7 @@ npm run migrate:workspaces
 ```powershell
 npm test
 ```
-The test suite executes 160 automated tests across 46 test suites using Node's native test runner (`node:test`) with an isolated in-memory MongoDB instance. No external database connection is required.
+The test suite executes 161 automated tests across 46 test suites using Node's native test runner (`node:test`) with an isolated in-memory MongoDB instance. No external database connection is required.
 
 ---
 

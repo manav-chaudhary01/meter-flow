@@ -192,7 +192,7 @@
               <label for="filter-alert-status" class="filter-label" style="font-size: 0.75rem;">Show:</label>
               <select id="filter-alert-status" class="filter-select" style="font-size: 0.75rem; padding: 0.2rem 0.5rem;">
                 <option value="">All Alerts</option>
-                <option value="triggered" selected>Triggered (Active)</option>
+                <option value="active" selected>Active (Triggered)</option>
                 <option value="acknowledged">Acknowledged</option>
               </select>
             </div>
@@ -222,7 +222,7 @@
         <h3 id="create-budget-title">Create Workspace Budget</h3>
         <button type="button" class="modal-close-btn" data-close-modal="create-budget-modal" aria-label="Close dialog">&times;</button>
       </div>
-      <form id="create-budget-form">
+      <form id="create-budget-form" novalidate>
         <div class="modal-body">
           <div id="create-budget-error" class="alert alert-error" style="display: none;" role="alert"></div>
 
@@ -234,7 +234,7 @@
           <div class="form-row">
             <div class="form-group">
               <label for="budget-amount" class="form-label">Budget Limit Amount *</label>
-              <input type="number" id="budget-amount" class="form-input" required min="0.01" step="0.01" placeholder="e.g. 1000.00">
+              <input type="text" inputmode="decimal" id="budget-amount" class="form-input" required placeholder="e.g. 1000.00">
             </div>
             <div class="form-group">
               <label for="budget-currency" class="form-label">Currency *</label>
@@ -284,7 +284,7 @@
         <h3 id="edit-budget-title">Edit Budget</h3>
         <button type="button" class="modal-close-btn" data-close-modal="edit-budget-modal" aria-label="Close dialog">&times;</button>
       </div>
-      <form id="edit-budget-form">
+      <form id="edit-budget-form" novalidate>
         <input type="hidden" id="edit-budget-id">
         <div class="modal-body">
           <div id="edit-budget-error" class="alert alert-error" style="display: none;" role="alert"></div>
@@ -297,7 +297,7 @@
           <div class="form-row">
             <div class="form-group">
               <label for="edit-budget-amount" class="form-label">Limit Amount *</label>
-              <input type="number" id="edit-budget-amount" class="form-input" required min="0.01" step="0.01">
+              <input type="text" inputmode="decimal" id="edit-budget-amount" class="form-input" required placeholder="e.g. 1000.00">
             </div>
             <div class="form-group">
               <label for="edit-budget-status" class="form-label">Status</label>
@@ -319,6 +319,27 @@
           <button type="submit" id="edit-budget-submit-btn" class="btn btn-primary">Save Changes</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- Deactivate Confirmation Modal -->
+  <div id="deactivate-budget-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="deactivate-modal-title">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 id="deactivate-modal-title">Deactivate Budget</h3>
+        <button type="button" class="modal-close-btn" data-close-modal="deactivate-budget-modal" aria-label="Close dialog">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="deactivate-modal-error" class="alert alert-error" style="display: none;" role="alert"></div>
+        <p>Are you sure you want to deactivate budget <strong id="deactivate-budget-name"></strong>?</p>
+        <p class="text-muted" style="font-size: 0.85rem; margin-top: var(--space-sm);">
+          Deactivated (archived) budgets preserve historical alert records but will no longer monitor new spending or evaluate thresholds.
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-close-modal="deactivate-budget-modal">Cancel</button>
+        <button type="button" id="deactivate-confirm-btn" class="btn btn-danger">Deactivate Budget</button>
+      </div>
     </div>
   </div>
 

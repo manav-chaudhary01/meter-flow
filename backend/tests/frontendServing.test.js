@@ -420,13 +420,125 @@ describe("Frontend Static Serving & Security Boundaries", () => {
     assert.ok(validRange.endDateISO.startsWith("2026-10-31T23:59:59"));
   });
 
-  it("GET /budgets should serve budgets.html with 200 OK", async () => {
+  it("GET /budgets should serve budgets.html with 200 OK, metric cards, and modals", async () => {
     const res = await request(app).get("/budgets");
     assert.equal(res.status, 200);
     assert.match(res.headers["content-type"], /text\/html/);
     assert.match(res.text, /Budgets, Alerts & Forecasting — MeterFlow/);
     assert.match(res.text, /id="budgets-container"/);
     assert.match(res.text, /id="create-budget-form"/);
+    assert.match(res.text, /id="metric-active-budgets"/);
+    assert.match(res.text, /id="metric-total-budget"/);
+    assert.match(res.text, /id="metric-triggered-alerts"/);
+    assert.match(res.text, /id="alerts-list-container"/);
+    assert.match(res.text, /id="filter-alert-status"/);
+    assert.match(res.text, /id="create-budget-modal"/);
+    assert.match(res.text, /id="edit-budget-modal"/);
+    assert.match(res.text, /id="deactivate-budget-modal"/);
+    assert.match(res.text, /id="deactivate-confirm-btn"/);
+  });
+
+  it("GET /js/budgets.js should serve the budgets controller with safe DOM & valid pure helpers", async () => {
+    const res = await request(app).get("/js/budgets.js");
+    assert.equal(res.status, 200);
+    assert.match(res.headers["content-type"], /javascript/);
+    assert.match(res.text, /initBudgetsPage/);
+    assert.match(res.text, /renderBudgets/);
+    assert.match(res.text, /renderAlerts/);
+    assert.match(res.text, /evaluateBudgetAction/);
+    assert.doesNotMatch(res.text, /\.innerHTML\s*=/);
+    assert.doesNotMatch(res.text, /\bwindow\.confirm\s*\(/);
+    assert.doesNotMatch(res.text, /\bwindow\.alert\s*\(/);
+
+    // Run in isolated VM to verify pure validation, thresholds, formatting, and payload helpers
+    const sandbox = { window: {} };
+    vm.runInNewContext(res.text, sandbox);
+    const helpers = sandbox.window.MeterFlowBudgets;
+    assert.ok(helpers, "MeterFlowBudgets helpers should be exposed on window");
+
+    // 1. RBAC permissions
+    assert.equal(helpers.canManageBudgets("owner"), true);
+    assert.equal(helpers.canManageBudgets("admin"), true);
+    assert.equal(helpers.canManageBudgets("member"), false);
+    assert.equal(helpers.canManageBudgets("viewer"), false);
+
+    // 2. Threshold parsing
+    const defaultThresh = helpers.parseThresholds("");
+    assert.deepEqual(JSON.parse(JSON.stringify(defaultThresh.thresholds)), [50, 80, 90, 100]);
+
+    const customThresh = helpers.parseThresholds("80, 50, 100, 90, 80");
+    assert.deepEqual(JSON.parse(JSON.stringify(customThresh.thresholds)), [50, 80, 90, 100]);
+
+    const badThresh = helpers.parseThresholds("50, 250");
+    assert.match(badThresh.error, /between 1 and 200/i);
+
+    const zeroThresh = helpers.parseThresholds("0, 50");
+    assert.match(zeroThresh.error, /between 1 and 200/i);
+
+    // 3. Amount validation
+    assert.match(helpers.validateBudgetAmount("").error, /required/i);
+    assert.match(helpers.validateBudgetAmount("-50").error, /positive number/i);
+    assert.match(helpers.validateBudgetAmount("0").error, /positive number/i);
+    assert.match(helpers.validateBudgetAmount("abc").error, /valid finite number/i);
+    assert.equal(helpers.validateBudgetAmount("1500.50").value, "1500.50");
+
+    // 4. Form validation (create mode)
+    assert.match(
+      helpers.validateBudgetForm("create", { name: "A", amount: "100", currency: "USD", startDate: "2026-03-01", endDate: "2026-04-01" }).error,
+      /minimum 2 characters/i
+    );
+    assert.match(
+      helpers.validateBudgetForm("create", { name: "Q1 Budget", amount: "100", currency: "US", startDate: "2026-03-01", endDate: "2026-04-01" }).error,
+      /3-letter ISO code/i
+    );
+    assert.match(
+      helpers.validateBudgetForm("create", { name: "Q1 Budget", amount: "100", currency: "USD", startDate: "2026-04-01", endDate: "2026-03-01" }).error,
+      /strictly before/i
+    );
+    assert.equal(
+      helpers.validateBudgetForm("create", {
+        name: "Q1 Infrastructure",
+        amount: "1000.00",
+        currency: "usd",
+        periodType: "monthly",
+        startDate: "2026-03-01T00:00:00Z",
+        endDate: "2026-04-01T00:00:00Z",
+        thresholds: "50, 80, 90, 100"
+      }).valid,
+      true
+    );
+
+    // 5. Payload builder
+    const createPayload = helpers.buildCreatePayload({
+      name: "Q1 Infrastructure",
+      amount: "1000",
+      currency: "usd",
+      periodType: "monthly",
+      startDate: "2026-03-01T00:00:00.000Z",
+      endDate: "2026-04-01T00:00:00.000Z",
+      thresholds: "50, 75, 90"
+    });
+    assert.equal(createPayload.name, "Q1 Infrastructure");
+    assert.equal(createPayload.amount, "1000.00");
+    assert.equal(createPayload.currency, "USD");
+    assert.deepEqual(JSON.parse(JSON.stringify(createPayload.thresholds)), [50, 75, 90]);
+
+    const editPayload = helpers.buildEditPayload({
+      name: "Updated Q1 Infrastructure",
+      amount: "1250",
+      status: "active",
+      thresholds: "50, 80, 100"
+    });
+    assert.equal(editPayload.name, "Updated Q1 Infrastructure");
+    assert.equal(editPayload.amount, "1250.00");
+    assert.equal(editPayload.status, "active");
+    assert.deepEqual(JSON.parse(JSON.stringify(editPayload.thresholds)), [50, 80, 100]);
+
+    // 6. Formatting helpers
+    assert.equal(helpers.formatCurrency("1500.00", "USD"), "USD 1,500.00");
+    assert.equal(helpers.formatCurrency(null, "EUR"), "EUR 0.00");
+    assert.equal(helpers.formatDateTime(""), "--");
+    assert.equal(helpers.formatDateOnly(""), "--");
   });
 
   it("GET new JavaScript controller modules should return application/javascript", async () => {

@@ -1,28 +1,258 @@
 /**
  * MeterFlow Budgets, Alerts & Forecasting Controller
  * Manages spending limits, threshold alert evaluations, and explainable linear projections.
+ * Strict DOM Safety: Zero unsafe innerHTML for dynamic API/user content.
  */
 
 (function (window) {
   "use strict";
 
+  // --- Pure Helpers (exposed on window.MeterFlowBudgets for verification) ---
+
+  function stringOrEmpty(val) {
+    return val === null || val === undefined ? "" : String(val);
+  }
+
+  function canManageBudgets(role) {
+    const r = stringOrEmpty(role).trim().toLowerCase();
+    return r === "owner" || r === "admin";
+  }
+
+  function parseThresholds(input) {
+    if (Array.isArray(input)) {
+      if (input.length === 0) {
+        return { error: "Thresholds array must not be empty" };
+      }
+      const numbers = [];
+      for (const t of input) {
+        const n = Number(t);
+        if (Number.isNaN(n) || n <= 0 || n > 200) {
+          return { error: "Each threshold must be a number between 1 and 200" };
+        }
+        numbers.push(n);
+      }
+      const uniqueSorted = [...new Set(numbers)].sort((a, b) => a - b);
+      return { valid: true, thresholds: uniqueSorted };
+    }
+
+    const str = stringOrEmpty(input).trim();
+    if (!str) {
+      return { valid: true, thresholds: [50, 80, 90, 100] };
+    }
+
+    const parts = str.split(",");
+    const numbers = [];
+    for (const part of parts) {
+      const trimmed = part.trim();
+      if (!trimmed) continue;
+      const n = Number(trimmed);
+      if (Number.isNaN(n) || n <= 0 || n > 200) {
+        return { error: "Each threshold must be a number between 1 and 200" };
+      }
+      numbers.push(n);
+    }
+
+    if (numbers.length === 0) {
+      return { error: "Thresholds must be a non-empty comma-separated list of numbers" };
+    }
+
+    const uniqueSorted = [...new Set(numbers)].sort((a, b) => a - b);
+    return { valid: true, thresholds: uniqueSorted };
+  }
+
+  function validateBudgetAmount(amount) {
+    if (amount === undefined || amount === null || amount === "") {
+      return { error: "Budget amount is required" };
+    }
+    const str = String(amount).trim();
+    const num = Number(str);
+    if (Number.isNaN(num) || !Number.isFinite(num)) {
+      return { error: "Budget amount must be a valid finite number" };
+    }
+    if (num <= 0) {
+      return { error: "Budget amount must be a positive number (> 0)" };
+    }
+    return { valid: true, value: num.toFixed(2) };
+  }
+
+  function validateBudgetForm(mode, values) {
+    const name = stringOrEmpty(values.name).trim();
+    if (!name || name.length < 2) {
+      return { error: "Budget name is required (minimum 2 characters)", fieldId: "budget-name" };
+    }
+    if (name.length > 100) {
+      return { error: "Budget name must be 100 characters or fewer", fieldId: "budget-name" };
+    }
+
+    const amountCheck = validateBudgetAmount(values.amount);
+    if (amountCheck.error) {
+      return { error: amountCheck.error, fieldId: "budget-amount" };
+    }
+
+    if (mode === "create") {
+      const currency = stringOrEmpty(values.currency).trim().toUpperCase();
+      if (!currency || !/^[A-Z]{3}$/.test(currency)) {
+        return { error: "Currency must be a valid 3-letter ISO code (e.g. USD, EUR)", fieldId: "budget-currency" };
+      }
+
+      const startStr = stringOrEmpty(values.startDate).trim();
+      const endStr = stringOrEmpty(values.endDate).trim();
+      if (!startStr) {
+        return { error: "Start date is required", fieldId: "budget-start-date" };
+      }
+      if (!endStr) {
+        return { error: "End date is required", fieldId: "budget-end-date" };
+      }
+
+      const s = new Date(startStr);
+      const e = new Date(endStr);
+      if (Number.isNaN(s.getTime())) {
+        return { error: "Invalid start date format", fieldId: "budget-start-date" };
+      }
+      if (Number.isNaN(e.getTime())) {
+        return { error: "Invalid end date format", fieldId: "budget-end-date" };
+      }
+      if (s >= e) {
+        return { error: "Start date must be strictly before end date", fieldId: "budget-start-date" };
+      }
+
+      const periodType = stringOrEmpty(values.periodType).trim().toLowerCase();
+      if (!["monthly", "quarterly", "yearly", "custom"].includes(periodType)) {
+        return { error: "Invalid period type", fieldId: "budget-period-type" };
+      }
+    }
+
+    if (values.thresholds !== undefined && values.thresholds !== "") {
+      const threshCheck = parseThresholds(values.thresholds);
+      if (threshCheck.error) {
+        return { error: threshCheck.error, fieldId: "budget-thresholds" };
+      }
+    }
+
+    return { valid: true };
+  }
+
+  function buildCreatePayload(values) {
+    const s = new Date(values.startDate);
+    const e = new Date(values.endDate);
+    const currency = stringOrEmpty(values.currency).trim().toUpperCase() || "USD";
+    const threshCheck = parseThresholds(values.thresholds);
+    const thresholds = threshCheck.valid ? threshCheck.thresholds : [50, 80, 90, 100];
+    const amountNum = Number(values.amount);
+
+    return {
+      name: stringOrEmpty(values.name).trim(),
+      amount: amountNum.toFixed(2),
+      currency,
+      periodType: stringOrEmpty(values.periodType).trim().toLowerCase() || "monthly",
+      startDate: s.toISOString(),
+      endDate: e.toISOString(),
+      thresholds
+    };
+  }
+
+  function buildEditPayload(values) {
+    const payload = {};
+    if (values.name !== undefined) {
+      payload.name = stringOrEmpty(values.name).trim();
+    }
+    if (values.amount !== undefined) {
+      payload.amount = Number(values.amount).toFixed(2);
+    }
+    if (values.status !== undefined) {
+      payload.status = stringOrEmpty(values.status).trim();
+    }
+    if (values.thresholds !== undefined && values.thresholds !== "") {
+      const threshCheck = parseThresholds(values.thresholds);
+      if (threshCheck.valid) {
+        payload.thresholds = threshCheck.thresholds;
+      }
+    }
+    return payload;
+  }
+
+  function formatCurrency(amount, currency = "USD") {
+    if (amount === null || amount === undefined || amount === "") {
+      return `${currency} 0.00`;
+    }
+    const str = String(amount).trim();
+    const num = Number(str);
+    if (Number.isNaN(num)) {
+      return `${currency} ${str}`;
+    }
+    return `${currency} ${num.toLocaleString(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    })}`;
+  }
+
+  function formatDateTime(dateStr) {
+    if (!dateStr) return "--";
+    try {
+      const d = new Date(dateStr);
+      if (Number.isNaN(d.getTime())) return String(dateStr);
+      return d.toLocaleString(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit"
+      });
+    } catch {
+      return String(dateStr);
+    }
+  }
+
+  function formatDateOnly(dateStr) {
+    if (!dateStr) return "--";
+    try {
+      const d = new Date(dateStr);
+      if (Number.isNaN(d.getTime())) return String(dateStr);
+      return d.toLocaleDateString(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "numeric"
+      });
+    } catch {
+      return String(dateStr);
+    }
+  }
+
+  function formatPeriod(startStr, endStr) {
+    const s = formatDateOnly(startStr);
+    const e = formatDateOnly(endStr);
+    return `${s} – ${e}`;
+  }
+
+  // Expose pure helpers on window
+  window.MeterFlowBudgets = {
+    canManageBudgets,
+    parseThresholds,
+    validateBudgetAmount,
+    validateBudgetForm,
+    buildCreatePayload,
+    buildEditPayload,
+    formatCurrency,
+    formatDateTime,
+    formatDateOnly,
+    formatPeriod
+  };
+
+  // If running in Node VM test context without DOM window.document, exit early
+  if (typeof document === "undefined") {
+    return;
+  }
+
   const api = window.MeterFlowAPI;
   const auth = window.MeterFlowAuth;
 
-  if (!auth.requireAuth()) return;
+  if (!auth || !api || !auth.requireAuth()) return;
 
+  // --- Page State ---
   let currentWorkspaceRole = "member";
   let cachedBudgets = [];
-
-  function escapeHtml(str) {
-    if (str === null || str === undefined) return "";
-    return String(str)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;");
-  }
+  let pendingDeactivateBudgetId = null;
 
   document.addEventListener("DOMContentLoaded", initBudgetsPage);
 
@@ -33,6 +263,7 @@
     setupFilterEvents();
     setupCreateBudgetForm();
     setupEditBudgetForm();
+    setupDeactivateModal();
 
     await loadWorkspaces();
     await loadBudgets();
@@ -45,6 +276,19 @@
         await loadAlerts();
       });
     }
+
+    window.addEventListener("workspace-switched", async (e) => {
+      const newWs = e.detail?.workspace;
+      if (newWs && newWs.role) {
+        currentWorkspaceRole = newWs.role;
+        applyRolePermissions(currentWorkspaceRole);
+      }
+      clearBudgetsContainer();
+      clearAlertsContainer();
+      await loadWorkspaces();
+      await loadBudgets();
+      await loadAlerts();
+    });
   }
 
   function setupUserProfile() {
@@ -82,7 +326,11 @@
     if (mobileBtn && sidebar) {
       mobileBtn.addEventListener("click", () => sidebar.classList.toggle("open"));
       document.addEventListener("click", (e) => {
-        if (sidebar.classList.contains("open") && !sidebar.contains(e.target) && !mobileBtn.contains(e.target)) {
+        if (
+          sidebar.classList.contains("open") &&
+          !sidebar.contains(e.target) &&
+          !mobileBtn.contains(e.target)
+        ) {
           sidebar.classList.remove("open");
         }
       });
@@ -91,13 +339,13 @@
 
   async function loadWorkspaces() {
     const selectEl = document.getElementById("workspace-select");
-    const roleBadgeEl = document.getElementById("workspace-role-badge");
     if (!selectEl) return;
 
     try {
       const res = await api.get("/api/workspaces");
       if (res.success && res.data && Array.isArray(res.data.workspaces)) {
-        selectEl.innerHTML = "";
+        selectEl.textContent = "";
+
         res.data.workspaces.forEach((ws) => {
           const opt = document.createElement("option");
           opt.value = ws.id;
@@ -115,32 +363,40 @@
       console.error("Failed to load workspaces:", err.message);
     }
 
-    selectEl.addEventListener("change", async (e) => {
-      const targetWorkspaceId = e.target.value;
-      if (!targetWorkspaceId) return;
+    if (!selectEl.dataset.hasChangeListener) {
+      selectEl.dataset.hasChangeListener = "true";
+      selectEl.addEventListener("change", async (e) => {
+        const targetWorkspaceId = e.target.value;
+        if (!targetWorkspaceId) return;
 
-      selectEl.disabled = true;
-      try {
-        const switchRes = await api.post("/api/workspaces/switch", {
-          workspaceId: targetWorkspaceId
-        });
+        selectEl.disabled = true;
+        try {
+          const switchRes = await api.post("/api/workspaces/switch", {
+            workspaceId: targetWorkspaceId
+          });
 
-        if (switchRes.success && switchRes.data) {
-          api.setToken(switchRes.data.token);
-          api.setTenant(switchRes.data.workspace);
+          if (switchRes.success && switchRes.data) {
+            api.setToken(switchRes.data.token);
+            api.setTenant(switchRes.data.workspace);
 
-          currentWorkspaceRole = switchRes.data.workspace.role || "member";
-          applyRolePermissions(currentWorkspaceRole);
+            currentWorkspaceRole = switchRes.data.workspace.role || "member";
+            applyRolePermissions(currentWorkspaceRole);
 
-          await loadBudgets();
-          await loadAlerts();
+            // Clear previous workspace state before loading new workspace data
+            cachedBudgets = [];
+            clearBudgetsContainer();
+            clearAlertsContainer();
+
+            await loadBudgets();
+            await loadAlerts();
+          }
+        } catch (switchErr) {
+          showGlobalError("Failed to switch workspace: " + (switchErr.message || "Unknown error"));
+        } finally {
+          selectEl.disabled = false;
         }
-      } catch (switchErr) {
-        alert("Failed to switch workspace: " + (switchErr.message || "Unknown error"));
-      } finally {
-        selectEl.disabled = false;
-      }
-    });
+      });
+    }
   }
 
   function applyRolePermissions(role) {
@@ -148,16 +404,19 @@
     const openCreateBtn = document.getElementById("open-create-budget-btn");
 
     if (roleBadgeEl) {
+      const normalizedRole = stringOrEmpty(role).toLowerCase();
       roleBadgeEl.textContent = role;
-      roleBadgeEl.className = `badge badge-${role === "owner" ? "primary" : role === "admin" ? "info" : "neutral"}`;
+      roleBadgeEl.className = `badge badge-${
+        normalizedRole === "owner" ? "primary" : normalizedRole === "admin" ? "info" : "neutral"
+      }`;
     }
 
-    const canManage = role === "owner" || role === "admin";
+    const canManage = canManageBudgets(role);
     if (openCreateBtn) {
       openCreateBtn.disabled = !canManage;
       if (!canManage) {
         openCreateBtn.title = "Requires Admin or Owner role in this workspace";
-        openCreateBtn.style.opacity = "0.6";
+        openCreateBtn.style.opacity = "0.5";
         openCreateBtn.style.cursor = "not-allowed";
       } else {
         openCreateBtn.title = "";
@@ -171,11 +430,12 @@
     const openBtn = document.getElementById("open-create-budget-btn");
     const createModal = document.getElementById("create-budget-modal");
     const editModal = document.getElementById("edit-budget-modal");
+    const deactModal = document.getElementById("deactivate-budget-modal");
 
     if (openBtn && createModal) {
       openBtn.addEventListener("click", () => {
-        if (currentWorkspaceRole !== "owner" && currentWorkspaceRole !== "admin") {
-          alert("Only workspace owners and administrators can create budgets.");
+        if (!canManageBudgets(currentWorkspaceRole)) {
+          showGlobalError("Only workspace owners and administrators can create budgets.");
           return;
         }
 
@@ -189,6 +449,7 @@
         if (startInput && !startInput.value) startInput.value = formatDateTimeLocal(start);
         if (endInput && !endInput.value) endInput.value = formatDateTimeLocal(end);
 
+        hideCreateModalError();
         createModal.classList.add("open");
       });
     }
@@ -201,7 +462,7 @@
       });
     });
 
-    [createModal, editModal].forEach((modal) => {
+    [createModal, editModal, deactModal].forEach((modal) => {
       if (modal) {
         modal.addEventListener("click", (e) => {
           if (e.target === modal) modal.classList.remove("open");
@@ -212,18 +473,24 @@
 
   function formatDateTimeLocal(date) {
     const pad = (n) => String(n).padStart(2, "0");
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
+      date.getHours()
+    )}:${pad(date.getMinutes())}`;
   }
 
   function setupCreateBudgetForm() {
     const form = document.getElementById("create-budget-form");
     const submitBtn = document.getElementById("create-budget-submit-btn");
-    const errorBanner = document.getElementById("create-budget-error");
 
     if (form) {
       form.addEventListener("submit", async (e) => {
         e.preventDefault();
-        if (errorBanner) errorBanner.style.display = "none";
+        hideCreateModalError();
+
+        if (!canManageBudgets(currentWorkspaceRole)) {
+          showCreateModalError("Only workspace owners and administrators can create budgets.");
+          return;
+        }
 
         const name = document.getElementById("budget-name")?.value.trim();
         const amount = document.getElementById("budget-amount")?.value;
@@ -233,50 +500,40 @@
         const endVal = document.getElementById("budget-end-date")?.value;
         const rawThresholds = document.getElementById("budget-thresholds")?.value;
 
-        if (!name || name.length < 2) {
-          showModalError("Budget name must be at least 2 characters.");
+        const validation = validateBudgetForm("create", {
+          name,
+          amount,
+          currency,
+          periodType,
+          startDate: startVal,
+          endDate: endVal,
+          thresholds: rawThresholds
+        });
+
+        if (validation.error) {
+          showCreateModalError(validation.error);
           return;
         }
 
-        if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
-          showModalError("Budget amount must be a positive number (> 0).");
-          return;
+        const payload = buildCreatePayload({
+          name,
+          amount,
+          currency,
+          periodType,
+          startDate: startVal,
+          endDate: endVal,
+          thresholds: rawThresholds
+        });
+
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.textContent = "Creating...";
         }
-
-        if (!startVal || !endVal) {
-          showModalError("Both start and end dates are required.");
-          return;
-        }
-
-        const startDate = new Date(startVal);
-        const endDate = new Date(endVal);
-
-        if (startDate >= endDate) {
-          showModalError("Start date must be strictly before end date.");
-          return;
-        }
-
-        let thresholdsArray = [50, 80, 90, 100];
-        if (rawThresholds) {
-          const parts = rawThresholds.split(",").map((s) => Number(s.trim())).filter((n) => !isNaN(n));
-          if (parts.length > 0) thresholdsArray = parts;
-        }
-
-        submitBtn.disabled = true;
-        submitBtn.textContent = "Creating...";
 
         try {
-          const res = await api.post("/api/budgets", {
-            name,
-            amount,
-            currency,
-            periodType,
-            startDate: startDate.toISOString(),
-            endDate: endDate.toISOString(),
-            thresholds: thresholdsArray
-          });
+          const res = await api.post("/api/budgets", payload);
 
-          if (res.success) {
+          if (res.success && res.data) {
             form.reset();
             document.getElementById("create-budget-modal")?.classList.remove("open");
             showGlobalSuccess(`Budget "${res.data.budget.name}" created successfully.`);
@@ -284,31 +541,46 @@
             await loadAlerts();
           }
         } catch (err) {
-          showModalError(err.message || "Failed to create budget.");
+          showCreateModalError(err.message || "Failed to create budget.");
         } finally {
-          submitBtn.disabled = false;
-          submitBtn.textContent = "Create Budget";
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = "Create Budget";
+          }
         }
       });
     }
+  }
 
-    function showModalError(msg) {
-      if (errorBanner) {
-        errorBanner.textContent = msg;
-        errorBanner.style.display = "block";
-      }
+  function showCreateModalError(msg) {
+    const errorBanner = document.getElementById("create-budget-error");
+    if (errorBanner) {
+      errorBanner.textContent = msg;
+      errorBanner.style.display = "block";
+    }
+  }
+
+  function hideCreateModalError() {
+    const errorBanner = document.getElementById("create-budget-error");
+    if (errorBanner) {
+      errorBanner.textContent = "";
+      errorBanner.style.display = "none";
     }
   }
 
   function setupEditBudgetForm() {
     const form = document.getElementById("edit-budget-form");
     const submitBtn = document.getElementById("edit-budget-submit-btn");
-    const errorBanner = document.getElementById("edit-budget-error");
 
     if (form) {
       form.addEventListener("submit", async (e) => {
         e.preventDefault();
-        if (errorBanner) errorBanner.style.display = "none";
+        hideEditModalError();
+
+        if (!canManageBudgets(currentWorkspaceRole)) {
+          showEditModalError("Only workspace owners and administrators can edit budgets.");
+          return;
+        }
 
         const id = document.getElementById("edit-budget-id")?.value;
         const name = document.getElementById("edit-budget-name")?.value.trim();
@@ -316,35 +588,118 @@
         const status = document.getElementById("edit-budget-status")?.value;
         const rawThresholds = document.getElementById("edit-budget-thresholds")?.value;
 
-        const payload = { name, amount, status };
+        const validation = validateBudgetForm("edit", {
+          name,
+          amount,
+          status,
+          thresholds: rawThresholds
+        });
 
-        if (rawThresholds) {
-          const parts = rawThresholds.split(",").map((s) => Number(s.trim())).filter((n) => !isNaN(n));
-          if (parts.length > 0) payload.thresholds = parts;
+        if (validation.error) {
+          showEditModalError(validation.error);
+          return;
         }
 
-        submitBtn.disabled = true;
-        submitBtn.textContent = "Saving...";
+        const payload = buildEditPayload({
+          name,
+          amount,
+          status,
+          thresholds: rawThresholds
+        });
+
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.textContent = "Saving...";
+        }
 
         try {
           const res = await api.put(`/api/budgets/${id}`, payload);
-          if (res.success) {
+          if (res.success && res.data) {
             document.getElementById("edit-budget-modal")?.classList.remove("open");
             showGlobalSuccess(`Budget "${res.data.budget.name}" updated successfully.`);
             await loadBudgets();
             await loadAlerts();
           }
         } catch (err) {
-          if (errorBanner) {
-            errorBanner.textContent = err.message || "Failed to update budget.";
-            errorBanner.style.display = "block";
-          }
+          showEditModalError(err.message || "Failed to update budget.");
         } finally {
-          submitBtn.disabled = false;
-          submitBtn.textContent = "Save Changes";
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = "Save Changes";
+          }
         }
       });
     }
+  }
+
+  function showEditModalError(msg) {
+    const errorBanner = document.getElementById("edit-budget-error");
+    if (errorBanner) {
+      errorBanner.textContent = msg;
+      errorBanner.style.display = "block";
+    }
+  }
+
+  function hideEditModalError() {
+    const errorBanner = document.getElementById("edit-budget-error");
+    if (errorBanner) {
+      errorBanner.textContent = "";
+      errorBanner.style.display = "none";
+    }
+  }
+
+  function setupDeactivateModal() {
+    const confirmBtn = document.getElementById("deactivate-confirm-btn");
+    const modal = document.getElementById("deactivate-budget-modal");
+    const errorBanner = document.getElementById("deactivate-modal-error");
+
+    if (confirmBtn) {
+      confirmBtn.addEventListener("click", async () => {
+        if (!pendingDeactivateBudgetId) return;
+        if (errorBanner) {
+          errorBanner.textContent = "";
+          errorBanner.style.display = "none";
+        }
+
+        confirmBtn.disabled = true;
+        confirmBtn.textContent = "Deactivating...";
+
+        try {
+          const res = await api.delete(`/api/budgets/${pendingDeactivateBudgetId}`);
+          if (res.success) {
+            if (modal) modal.classList.remove("open");
+            showGlobalSuccess("Budget deactivated successfully (archived).");
+            pendingDeactivateBudgetId = null;
+            await loadBudgets();
+          }
+        } catch (err) {
+          if (errorBanner) {
+            errorBanner.textContent = err.message || "Failed to deactivate budget.";
+            errorBanner.style.display = "block";
+          }
+        } finally {
+          confirmBtn.disabled = false;
+          confirmBtn.textContent = "Deactivate Budget";
+        }
+      });
+    }
+  }
+
+  function openDeactivateBudgetModal(budget) {
+    if (!budget) return;
+    pendingDeactivateBudgetId = budget.id;
+
+    const modal = document.getElementById("deactivate-budget-modal");
+    const nameEl = document.getElementById("deactivate-budget-name");
+    const errorBanner = document.getElementById("deactivate-modal-error");
+
+    if (nameEl) nameEl.textContent = budget.name;
+    if (errorBanner) {
+      errorBanner.textContent = "";
+      errorBanner.style.display = "none";
+    }
+
+    if (modal) modal.classList.add("open");
   }
 
   function setupFilterEvents() {
@@ -371,6 +726,16 @@
     }
   }
 
+  function clearBudgetsContainer() {
+    const container = document.getElementById("budgets-container");
+    if (container) container.textContent = "";
+  }
+
+  function clearAlertsContainer() {
+    const container = document.getElementById("alerts-list-container");
+    if (container) container.textContent = "";
+  }
+
   async function loadBudgets() {
     const container = document.getElementById("budgets-container");
     const emptyState = document.getElementById("budgets-empty");
@@ -387,11 +752,13 @@
     if (currency) params.currency = currency;
 
     if (container) {
-      container.innerHTML = `
-        <div style="text-align: center; color: var(--color-text-muted); padding: 2rem;">
-          Loading budgets and forecasts...
-        </div>
-      `;
+      container.textContent = "";
+      const loadingDiv = document.createElement("div");
+      loadingDiv.style.textAlign = "center";
+      loadingDiv.style.color = "var(--color-text-muted)";
+      loadingDiv.style.padding = "2rem";
+      loadingDiv.textContent = "Loading budgets and forecasts...";
+      container.appendChild(loadingDiv);
     }
 
     try {
@@ -406,7 +773,7 @@
       updateSummaryKPIs(budgets);
 
       if (budgets.length === 0) {
-        if (container) container.innerHTML = "";
+        clearBudgetsContainer();
         if (emptyState) emptyState.style.display = "block";
         return;
       }
@@ -419,11 +786,13 @@
         errorBanner.style.display = "block";
       }
       if (container) {
-        container.innerHTML = `
-          <div style="text-align: center; color: var(--color-danger); padding: 2rem;">
-            Failed to load budgets.
-          </div>
-        `;
+        container.textContent = "";
+        const errDiv = document.createElement("div");
+        errDiv.style.textAlign = "center";
+        errDiv.style.color = "var(--color-danger)";
+        errDiv.style.padding = "2rem";
+        errDiv.textContent = "Failed to load budgets.";
+        container.appendChild(errDiv);
       }
     }
   }
@@ -444,16 +813,21 @@
     });
 
     if (totalBudgetEl) {
-      totalBudgetEl.textContent = `${curr} ${totalSum.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      totalBudgetEl.textContent = `${curr} ${totalSum.toLocaleString(undefined, {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      })}`;
     }
   }
+
+  // --- Safe DOM Rendering for Budgets ---
 
   function renderBudgets(budgets) {
     const container = document.getElementById("budgets-container");
     if (!container) return;
 
-    container.innerHTML = "";
-    const canManage = currentWorkspaceRole === "owner" || currentWorkspaceRole === "admin";
+    container.textContent = "";
+    const canManage = canManageBudgets(currentWorkspaceRole);
 
     budgets.forEach((b) => {
       const card = document.createElement("div");
@@ -470,132 +844,256 @@
         fillClass = "fill-warning";
       }
 
-      const periodDates = `${new Date(b.startDate).toLocaleDateString()} &ndash; ${new Date(b.endDate).toLocaleDateString()}`;
+      // Top Row: Title, Badges & Actions
+      const topRow = document.createElement("div");
+      topRow.style.display = "flex";
+      topRow.style.justifyContent = "space-between";
+      topRow.style.alignItems = "flex-start";
+      topRow.style.marginBottom = "var(--space-md)";
+      topRow.style.flexWrap = "wrap";
+      topRow.style.gap = "var(--space-sm)";
 
-      // Forecast section generation
-      let forecastHtml = "";
-      if (b.forecast) {
-        const f = b.forecast;
-        if (f.hasSufficientData) {
-          const overrunBadge = f.isProjectedToExceed
-            ? `<span class="badge badge-danger" style="margin-left: 8px;">Projected Overrun: +${escapeHtml(f.currency)} ${escapeHtml(f.projectedVariance)}</span>`
-            : '<span class="badge badge-success" style="margin-left: 8px;">On Track</span>';
+      // Title & Meta
+      const titleCol = document.createElement("div");
+      const titleWrap = document.createElement("div");
+      titleWrap.style.display = "flex";
+      titleWrap.style.alignItems = "center";
+      titleWrap.style.gap = "var(--space-sm)";
 
-          forecastHtml = `
-            <div class="forecast-card">
-              <div class="forecast-title">
-                <span>📈 Deterministic Linear Run-Rate Forecast</span>
-                ${overrunBadge}
-              </div>
-              <div class="forecast-grid">
-                <div class="forecast-item">
-                  <span class="forecast-item-label">Projected Spend</span>
-                  <span class="forecast-item-value" style="color: ${f.isProjectedToExceed ? "var(--color-danger)" : "var(--color-text-main)};">
-                    ${escapeHtml(f.currency)} ${escapeHtml(f.forecastSpend)}
-                  </span>
-                </div>
-                <div class="forecast-item">
-                  <span class="forecast-item-label">Daily Burn Rate</span>
-                  <span class="forecast-item-value">
-                    ${escapeHtml(f.currency)} ${escapeHtml(f.dailyAverageSpend)} / day
-                  </span>
-                </div>
-                <div class="forecast-item">
-                  <span class="forecast-item-label">Period Window</span>
-                  <span class="forecast-item-value">
-                    ${escapeHtml(f.dataWindow?.daysElapsed || 0)} of ${escapeHtml(f.dataWindow?.daysTotal || 0)} days
-                  </span>
-                </div>
-              </div>
-              <div style="font-size: 0.75rem; color: var(--color-text-muted); margin-top: var(--space-xs);">
-                <strong>Assumptions:</strong> ${escapeHtml(f.assumptions || "Constant daily rate.")}
-              </div>
-            </div>
-          `;
+      const h3 = document.createElement("h3");
+      h3.style.fontSize = "1.15rem";
+      h3.style.margin = "0";
+      h3.textContent = b.name;
+      titleWrap.appendChild(h3);
+
+      const statusBadge = document.createElement("span");
+      statusBadge.className = `badge badge-${b.status === "active" ? "success" : "neutral"}`;
+      statusBadge.textContent = b.status;
+      titleWrap.appendChild(statusBadge);
+
+      const periodBadge = document.createElement("span");
+      periodBadge.className = "badge badge-neutral";
+      periodBadge.style.textTransform = "capitalize";
+      periodBadge.textContent = b.periodType;
+      titleWrap.appendChild(periodBadge);
+      titleCol.appendChild(titleWrap);
+
+      const metaDiv = document.createElement("div");
+      metaDiv.style.fontSize = "0.8rem";
+      metaDiv.style.color = "var(--color-text-muted)";
+      metaDiv.style.marginTop = "2px";
+      const thresholdText = (b.thresholds || []).join("%, ") + "%";
+      metaDiv.textContent = `Period: ${formatPeriod(b.startDate, b.endDate)} · Alert Thresholds: [${thresholdText}]`;
+      titleCol.appendChild(metaDiv);
+      topRow.appendChild(titleCol);
+
+      // Actions Column
+      const actionCol = document.createElement("div");
+      actionCol.style.display = "flex";
+      actionCol.style.gap = "var(--space-xs)";
+
+      // 1. Evaluate Alerts Button
+      const evalBtn = document.createElement("button");
+      evalBtn.className = "btn btn-secondary btn-sm action-evaluate-btn";
+      evalBtn.style.fontSize = "0.8rem";
+      evalBtn.textContent = "Evaluate Alerts";
+      if (!canManage) {
+        evalBtn.disabled = true;
+        evalBtn.title = "Requires Admin or Owner role";
+        evalBtn.style.opacity = "0.6";
+        evalBtn.style.cursor = "not-allowed";
+      } else {
+        evalBtn.addEventListener("click", () => evaluateBudgetAction(b.id, evalBtn));
+      }
+      actionCol.appendChild(evalBtn);
+
+      // 2. Edit Button
+      const editBtn = document.createElement("button");
+      editBtn.className = "btn btn-secondary btn-sm action-edit-btn";
+      editBtn.style.fontSize = "0.8rem";
+      editBtn.textContent = "Edit";
+      if (!canManage) {
+        editBtn.disabled = true;
+        editBtn.title = "Requires Admin or Owner role";
+        editBtn.style.opacity = "0.6";
+        editBtn.style.cursor = "not-allowed";
+      } else {
+        editBtn.addEventListener("click", () => openEditBudgetModal(b.id));
+      }
+      actionCol.appendChild(editBtn);
+
+      // 3. Deactivate Button (if active)
+      if (b.status === "active") {
+        const deactBtn = document.createElement("button");
+        deactBtn.className = "btn btn-secondary btn-sm action-archive-btn";
+        deactBtn.style.color = "var(--color-danger)";
+        deactBtn.style.fontSize = "0.8rem";
+        deactBtn.textContent = "Deactivate";
+        if (!canManage) {
+          deactBtn.disabled = true;
+          deactBtn.title = "Requires Admin or Owner role";
+          deactBtn.style.opacity = "0.6";
+          deactBtn.style.cursor = "not-allowed";
         } else {
-          forecastHtml = `
-            <div class="forecast-card" style="border-style: solid; background: var(--color-bg-body);">
-              <div style="font-size: 0.8rem; color: var(--color-text-muted);">
-                ℹ️ <strong>Forecast Note:</strong> ${escapeHtml(f.reason || "Insufficient historical data in this period.")}
-              </div>
-            </div>
-          `;
+          deactBtn.addEventListener("click", () => openDeactivateBudgetModal(b));
         }
+        actionCol.appendChild(deactBtn);
       }
 
-      card.innerHTML = `
-        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: var(--space-md); flex-wrap: wrap; gap: var(--space-sm);">
-          <div>
-            <div style="display: flex; align-items: center; gap: var(--space-sm);">
-              <h3 style="font-size: 1.15rem; margin: 0;">${escapeHtml(b.name)}</h3>
-              <span class="badge badge-${b.status === "active" ? "success" : "neutral"}">${escapeHtml(b.status)}</span>
-              <span class="badge badge-neutral" style="text-transform: capitalize;">${escapeHtml(b.periodType)}</span>
-            </div>
-            <div style="font-size: 0.8rem; color: var(--color-text-muted); margin-top: 2px;">
-              Period: ${periodDates} · Alert Thresholds: [${escapeHtml((b.thresholds || []).join("%, "))}%]
-            </div>
-          </div>
-          <div style="display: flex; gap: var(--space-xs);">
-            <button class="btn btn-secondary btn-sm action-evaluate-btn" data-id="${b.id}" ${canManage ? "" : "disabled title='Requires Admin or Owner role'"} style="font-size: 0.8rem;">
-              Evaluate Alerts
-            </button>
-            <button class="btn btn-secondary btn-sm action-edit-btn" data-id="${b.id}" ${canManage ? "" : "disabled title='Requires Admin or Owner role'"} style="font-size: 0.8rem;">
-              Edit
-            </button>
-            ${
-              b.status === "active"
-                ? `<button class="btn btn-secondary btn-sm action-archive-btn" data-id="${b.id}" data-name="${escapeHtml(b.name)}" ${canManage ? "" : "disabled title='Requires Admin or Owner role'"} style="color: var(--color-danger); font-size: 0.8rem;">Deactivate</button>`
-                : ""
-            }
-          </div>
-        </div>
+      topRow.appendChild(actionCol);
+      card.appendChild(topRow);
 
-        <!-- Progress bar and spend summary -->
-        <div class="budget-item">
-          <div class="budget-item-top">
-            <span class="budget-item-name">Actual Spend</span>
-            <span class="budget-item-stats">
-              <strong>${escapeHtml(b.currency)} ${escapeHtml(b.actualSpend || "0.00")}</strong> of ${escapeHtml(b.currency)} ${escapeHtml(b.amount)} (${percentage}%)
-            </span>
-          </div>
-          <div class="progress-track" style="height: 10px;">
-            <div class="progress-fill ${fillClass}" style="width: ${clampedPct}%;"></div>
-          </div>
-        </div>
+      // Spend Summary & Progress Bar Section
+      const budgetItem = document.createElement("div");
+      budgetItem.className = "budget-item";
 
-        ${forecastHtml}
-      `;
+      const budgetItemTop = document.createElement("div");
+      budgetItemTop.className = "budget-item-top";
+
+      const spendLabel = document.createElement("span");
+      spendLabel.className = "budget-item-name";
+      spendLabel.textContent = "Actual Spend";
+      budgetItemTop.appendChild(spendLabel);
+
+      const statsSpan = document.createElement("span");
+      statsSpan.className = "budget-item-stats";
+
+      const strongSpend = document.createElement("strong");
+      strongSpend.textContent = formatCurrency(b.actualSpend || "0.00", b.currency);
+      statsSpan.appendChild(strongSpend);
+
+      const limitText = document.createTextNode(` of ${formatCurrency(b.amount, b.currency)} (${percentage}%)`);
+      statsSpan.appendChild(limitText);
+
+      budgetItemTop.appendChild(statsSpan);
+      budgetItem.appendChild(budgetItemTop);
+
+      const progressTrack = document.createElement("div");
+      progressTrack.className = "progress-track";
+      progressTrack.style.height = "10px";
+
+      const progressFill = document.createElement("div");
+      progressFill.className = `progress-fill ${fillClass}`;
+      progressFill.style.width = `${clampedPct}%`;
+      progressTrack.appendChild(progressFill);
+
+      budgetItem.appendChild(progressTrack);
+      card.appendChild(budgetItem);
+
+      // Forecast Section
+      if (b.forecast) {
+        const f = b.forecast;
+        const forecastCard = document.createElement("div");
+        forecastCard.className = "forecast-card";
+
+        if (f.hasSufficientData) {
+          const forecastTitle = document.createElement("div");
+          forecastTitle.className = "forecast-title";
+
+          const titleSpan = document.createElement("span");
+          titleSpan.textContent = "📈 Deterministic Linear Run-Rate Forecast";
+          forecastTitle.appendChild(titleSpan);
+
+          const overrunBadge = document.createElement("span");
+          if (f.isProjectedToExceed) {
+            overrunBadge.className = "badge badge-danger";
+            overrunBadge.style.marginLeft = "8px";
+            overrunBadge.textContent = `Projected Overrun: +${formatCurrency(f.projectedVariance, f.currency)}`;
+          } else {
+            overrunBadge.className = "badge badge-success";
+            overrunBadge.style.marginLeft = "8px";
+            overrunBadge.textContent = "On Track";
+          }
+          forecastTitle.appendChild(overrunBadge);
+          forecastCard.appendChild(forecastTitle);
+
+          // Forecast Grid
+          const forecastGrid = document.createElement("div");
+          forecastGrid.className = "forecast-grid";
+
+          // Item 1: Projected Spend
+          const item1 = document.createElement("div");
+          item1.className = "forecast-item";
+          const item1Label = document.createElement("span");
+          item1Label.className = "forecast-item-label";
+          item1Label.textContent = "Projected Spend";
+          item1.appendChild(item1Label);
+          const item1Val = document.createElement("span");
+          item1Val.className = "forecast-item-value";
+          if (f.isProjectedToExceed) {
+            item1Val.style.color = "var(--color-danger)";
+          }
+          item1Val.textContent = formatCurrency(f.forecastSpend, f.currency);
+          item1.appendChild(item1Val);
+          forecastGrid.appendChild(item1);
+
+          // Item 2: Daily Burn Rate
+          const item2 = document.createElement("div");
+          item2.className = "forecast-item";
+          const item2Label = document.createElement("span");
+          item2Label.className = "forecast-item-label";
+          item2Label.textContent = "Daily Burn Rate";
+          item2.appendChild(item2Label);
+          const item2Val = document.createElement("span");
+          item2Val.className = "forecast-item-value";
+          item2Val.textContent = `${formatCurrency(f.dailyAverageSpend, f.currency)} / day`;
+          item2.appendChild(item2Val);
+          forecastGrid.appendChild(item2);
+
+          // Item 3: Period Window
+          const item3 = document.createElement("div");
+          item3.className = "forecast-item";
+          const item3Label = document.createElement("span");
+          item3Label.className = "forecast-item-label";
+          item3Label.textContent = "Period Window";
+          item3.appendChild(item3Label);
+          const item3Val = document.createElement("span");
+          item3Val.className = "forecast-item-value";
+          const elapsedDays = f.dataWindow?.daysElapsed || 0;
+          const totalDays = f.dataWindow?.daysTotal || 0;
+          item3Val.textContent = `${elapsedDays} of ${totalDays} days`;
+          item3.appendChild(item3Val);
+          forecastGrid.appendChild(item3);
+
+          forecastCard.appendChild(forecastGrid);
+
+          // Assumptions & Limitations
+          const assumptionsDiv = document.createElement("div");
+          assumptionsDiv.style.fontSize = "0.75rem";
+          assumptionsDiv.style.color = "var(--color-text-muted)";
+          assumptionsDiv.style.marginTop = "var(--space-xs)";
+
+          const strongAssump = document.createElement("strong");
+          strongAssump.textContent = "Assumptions: ";
+          assumptionsDiv.appendChild(strongAssump);
+          assumptionsDiv.appendChild(document.createTextNode(f.assumptions || "Constant daily linear rate."));
+          forecastCard.appendChild(assumptionsDiv);
+        } else {
+          // Insufficient data or period not started
+          forecastCard.style.borderStyle = "solid";
+          forecastCard.style.background = "var(--color-bg-body)";
+
+          const noteDiv = document.createElement("div");
+          noteDiv.style.fontSize = "0.8rem";
+          noteDiv.style.color = "var(--color-text-muted)";
+
+          const noteStrong = document.createElement("strong");
+          noteStrong.textContent = "ℹ️ Forecast Note: ";
+          noteDiv.appendChild(noteStrong);
+          noteDiv.appendChild(document.createTextNode(f.reason || "Insufficient historical data in this period."));
+          forecastCard.appendChild(noteDiv);
+        }
+
+        card.appendChild(forecastCard);
+      }
 
       container.appendChild(card);
-    });
-
-    // Attach budget button listeners
-    container.querySelectorAll(".action-evaluate-btn").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const id = btn.getAttribute("data-id");
-        evaluateBudgetAction(id, btn);
-      });
-    });
-
-    container.querySelectorAll(".action-edit-btn").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const id = btn.getAttribute("data-id");
-        openEditBudgetModal(id);
-      });
-    });
-
-    container.querySelectorAll(".action-archive-btn").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const id = btn.getAttribute("data-id");
-        const name = btn.getAttribute("data-name");
-        archiveBudgetAction(id, name);
-      });
     });
   }
 
   async function evaluateBudgetAction(budgetId, btn) {
-    if (currentWorkspaceRole !== "owner" && currentWorkspaceRole !== "admin") {
-      alert("Only workspace owners and administrators can evaluate budget alerts.");
+    if (!canManageBudgets(currentWorkspaceRole)) {
+      showGlobalError("Only workspace owners and administrators can evaluate budget alerts.");
       return;
     }
 
@@ -604,14 +1102,14 @@
 
     try {
       const res = await api.post(`/api/budgets/${budgetId}/evaluate`);
-      if (res.success) {
-        const newCount = res.data?.newAlerts ? res.data.newAlerts.length : 0;
+      if (res.success && res.data) {
+        const newCount = Array.isArray(res.data.newAlerts) ? res.data.newAlerts.length : 0;
         showGlobalSuccess(`Evaluation complete: ${newCount} new alert(s) triggered.`);
         await loadBudgets();
         await loadAlerts();
       }
     } catch (err) {
-      alert(`Evaluation failed: ${err.message || "Unknown error"}`);
+      showGlobalError(`Evaluation failed: ${err.message || "Unknown error"}`);
     } finally {
       btn.disabled = false;
       btn.textContent = "Evaluate Alerts";
@@ -635,31 +1133,11 @@
     if (statusSelect) statusSelect.value = budget.status || "active";
     if (thresholdsInput) thresholdsInput.value = (budget.thresholds || []).join(", ");
 
+    hideEditModalError();
     if (modal) modal.classList.add("open");
   }
 
-  async function archiveBudgetAction(budgetId, budgetName) {
-    if (currentWorkspaceRole !== "owner" && currentWorkspaceRole !== "admin") {
-      alert("Only workspace owners and administrators can deactivate budgets.");
-      return;
-    }
-
-    const confirmed = window.confirm(
-      `Deactivate budget "${budgetName}"?\n\nDeactivated (archived) budgets preserve historical alerts but will no longer monitor new spending or evaluate thresholds.`
-    );
-
-    if (!confirmed) return;
-
-    try {
-      const res = await api.delete(`/api/budgets/${budgetId}`);
-      if (res.success) {
-        showGlobalSuccess(`Budget "${budgetName}" deactivated.`);
-        await loadBudgets();
-      }
-    } catch (err) {
-      alert(`Failed to deactivate budget: ${err.message || "Unknown error"}`);
-    }
-  }
+  // --- Alerts Handling & Safe DOM Rendering ---
 
   async function loadAlerts() {
     const container = document.getElementById("alerts-list-container");
@@ -674,11 +1152,11 @@
       const res = await api.get("/api/budgets/alerts", params);
       const alerts = res.data && Array.isArray(res.data.alerts) ? res.data.alerts : [];
 
-      const activeAlerts = alerts.filter((a) => a.status === "triggered");
+      const activeAlerts = alerts.filter((a) => a.status === "active");
       if (triggeredKpiEl) triggeredKpiEl.textContent = activeAlerts.length.toString();
 
       if (alerts.length === 0) {
-        if (container) container.innerHTML = "";
+        clearAlertsContainer();
         if (emptyState) emptyState.style.display = "block";
         return;
       }
@@ -694,65 +1172,86 @@
     const container = document.getElementById("alerts-list-container");
     if (!container) return;
 
-    container.innerHTML = "";
+    container.textContent = "";
 
     alerts.forEach((alertDoc) => {
       const item = document.createElement("div");
       const isExceeded = alertDoc.alertType === "threshold_exceeded" || alertDoc.threshold >= 100;
       item.className = `alert-item ${isExceeded ? "alert-exceeded" : "alert-reached"}`;
 
-      const triggeredDate = alertDoc.triggeredAt
-        ? new Date(alertDoc.triggeredAt).toLocaleString()
-        : "--";
+      const infoDiv = document.createElement("div");
+      infoDiv.className = "alert-item-info";
 
-      const isAcknowledged = alertDoc.status === "acknowledged";
+      // Alert Title Row
+      const titleRow = document.createElement("div");
+      titleRow.className = "alert-item-title";
 
-      item.innerHTML = `
-        <div class="alert-item-info">
-          <div class="alert-item-title">
-            <span>${escapeHtml(alertDoc.budgetName || "Budget")}</span>
-            <span class="badge ${isExceeded ? "badge-danger" : "badge-warning"}" style="margin-left: 6px;">
-              ${escapeHtml(alertDoc.threshold)}% Threshold ${isExceeded ? "Exceeded" : "Reached"}
-            </span>
-          </div>
-          <div class="alert-item-meta">
-            Actual Spend: ${escapeHtml(alertDoc.currency)} ${escapeHtml(alertDoc.actualSpend)} of ${escapeHtml(alertDoc.currency)} ${escapeHtml(alertDoc.budgetAmount)} (${escapeHtml(alertDoc.percentageUsed)}%) · ${escapeHtml(triggeredDate)}
-          </div>
-        </div>
-        <div class="alert-item-action">
-          ${
-            isAcknowledged
-              ? '<span class="badge badge-neutral">Acknowledged</span>'
-              : `<button class="btn btn-secondary btn-sm ack-btn" data-alert-id="${alertDoc.id}">Acknowledge</button>`
+      const nameSpan = document.createElement("span");
+      nameSpan.textContent = alertDoc.budgetName || "Budget";
+      titleRow.appendChild(nameSpan);
+
+      const typeBadge = document.createElement("span");
+      typeBadge.className = `badge ${isExceeded ? "badge-danger" : "badge-warning"}`;
+      typeBadge.style.marginLeft = "6px";
+      typeBadge.textContent = `${alertDoc.threshold}% Threshold ${isExceeded ? "Exceeded" : "Reached"}`;
+      titleRow.appendChild(typeBadge);
+      infoDiv.appendChild(titleRow);
+
+      // Alert Meta Row
+      const metaRow = document.createElement("div");
+      metaRow.className = "alert-item-meta";
+      const actualSpendFormatted = formatCurrency(alertDoc.actualSpend, alertDoc.currency);
+      const budgetAmountFormatted = formatCurrency(alertDoc.budgetAmount, alertDoc.currency);
+      const triggeredDate = formatDateTime(alertDoc.triggeredAt);
+      metaRow.textContent = `Actual Spend: ${actualSpendFormatted} of ${budgetAmountFormatted} (${alertDoc.percentageUsed}%) · Triggered: ${triggeredDate}`;
+      infoDiv.appendChild(metaRow);
+      item.appendChild(infoDiv);
+
+      // Alert Action Column
+      const actionDiv = document.createElement("div");
+      actionDiv.className = "alert-item-action";
+
+      if (alertDoc.status === "acknowledged") {
+        const ackBadge = document.createElement("span");
+        ackBadge.className = "badge badge-neutral";
+        ackBadge.textContent = "Acknowledged";
+        actionDiv.appendChild(ackBadge);
+      } else {
+        const ackBtn = document.createElement("button");
+        ackBtn.className = "btn btn-secondary btn-sm ack-btn";
+        ackBtn.setAttribute("data-alert-id", alertDoc.id);
+        ackBtn.textContent = "Acknowledge";
+
+        ackBtn.addEventListener("click", async () => {
+          ackBtn.disabled = true;
+          ackBtn.textContent = "Updating...";
+
+          try {
+            const ackRes = await api.patch(`/api/budgets/alerts/${alertDoc.id}/ack`);
+            if (ackRes.success) {
+              actionDiv.textContent = "";
+              const ackBadge = document.createElement("span");
+              ackBadge.className = "badge badge-neutral";
+              ackBadge.textContent = "Acknowledged";
+              actionDiv.appendChild(ackBadge);
+              await loadAlerts();
+            }
+          } catch (ackErr) {
+            ackBtn.disabled = false;
+            ackBtn.textContent = "Acknowledge";
+            showGlobalError("Failed to acknowledge alert: " + (ackErr.message || "Unknown error"));
           }
-        </div>
-      `;
+        });
 
+        actionDiv.appendChild(ackBtn);
+      }
+
+      item.appendChild(actionDiv);
       container.appendChild(item);
     });
-
-    container.querySelectorAll(".ack-btn").forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        const alertId = btn.getAttribute("data-alert-id");
-        if (!alertId) return;
-
-        btn.disabled = true;
-        btn.textContent = "Updating...";
-
-        try {
-          const ackRes = await api.patch(`/api/budgets/alerts/${alertId}/ack`);
-          if (ackRes.success) {
-            btn.outerHTML = '<span class="badge badge-neutral">Acknowledged</span>';
-            await loadAlerts();
-          }
-        } catch (ackErr) {
-          btn.disabled = false;
-          btn.textContent = "Acknowledge";
-          alert("Failed to acknowledge alert: " + (ackErr.message || "Unknown error"));
-        }
-      });
-    });
   }
+
+  // --- Banner Notifications ---
 
   function showGlobalSuccess(msg) {
     const banner = document.getElementById("budgets-success-banner");
@@ -762,5 +1261,15 @@
     setTimeout(() => {
       banner.style.display = "none";
     }, 5000);
+  }
+
+  function showGlobalError(msg) {
+    const banner = document.getElementById("budgets-error-banner");
+    if (!banner) return;
+    banner.textContent = msg;
+    banner.style.display = "block";
+    setTimeout(() => {
+      banner.style.display = "none";
+    }, 6000);
   }
 })(window);
