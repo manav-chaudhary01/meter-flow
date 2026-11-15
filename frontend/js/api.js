@@ -88,8 +88,89 @@
       }
     },
 
+    parseJwtPayload(token) {
+      if (!token || typeof token !== "string") return null;
+      const parts = token.split(".");
+      if (parts.length !== 3) return null;
+      try {
+        const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+        const pad = base64.length % 4;
+        const padded = pad ? base64 + "=".repeat(4 - pad) : base64;
+
+        let rawStr;
+        if (typeof atob === "function") {
+          rawStr = atob(padded);
+        } else if (typeof Buffer !== "undefined") {
+          rawStr = Buffer.from(padded, "base64").toString("utf-8");
+        } else {
+          return null;
+        }
+
+        try {
+          const jsonStr = decodeURIComponent(
+            rawStr
+              .split("")
+              .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+              .join("")
+          );
+          return JSON.parse(jsonStr);
+        } catch {
+          return JSON.parse(rawStr);
+        }
+      } catch {
+        return null;
+      }
+    },
+
     isAuthenticated() {
-      return Boolean(this.getToken());
+      const token = this.getToken();
+      if (!token) return false;
+
+      const user = this.getUser();
+      if (!user) {
+        this.clearSession();
+        return false;
+      }
+
+      const payload = this.parseJwtPayload(token);
+      if (!payload) {
+        this.clearSession();
+        return false;
+      }
+
+      if (payload.exp && typeof payload.exp === "number") {
+        if (payload.exp * 1000 <= Date.now()) {
+          this.clearSession();
+          return false;
+        }
+      }
+
+      return true;
+    },
+
+    formatAuthErrorMessage(err) {
+      if (!err) return "An unexpected error occurred.";
+      const msg = String(err.message || "");
+      if (err.status === 401) {
+        if (msg && !msg.toLowerCase().includes("session") && !msg.toLowerCase().includes("expired")) {
+          return msg;
+        }
+        return "Your session has expired. Please sign in again.";
+      }
+      if (err.status === 403) {
+        const lower = msg.toLowerCase();
+        if (lower.includes("suspended") || lower.includes("inactive")) {
+          return "Access Denied: Your workspace membership is suspended or inactive.";
+        }
+        if (lower.includes("not an active member")) {
+          return "Access Denied: You are not an active member of this workspace.";
+        }
+        if (lower.includes("requires one of the following roles") || lower.includes("role")) {
+          return "Access Denied: You do not have permission to perform this administrative action.";
+        }
+        return err.message || "Access Denied: You do not have permission to access this resource.";
+      }
+      return err.message || "An unexpected error occurred.";
     },
 
     // Core HTTP Request Driver

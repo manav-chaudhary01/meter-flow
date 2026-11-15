@@ -42,7 +42,7 @@ meter-flow/
 │   │   ├── routes/              # Express API route modules
 │   │   ├── services/            # Pure calculation & evaluation engines (billingCalculator, spendCalculator, spendForecaster, alertEvaluator)
 │   │   └── utils/               # Migration & workspace backfill utilities
-│   └── tests/                   # Automated unit & integration test suite (163 tests across 46 suites)
+│   └── tests/                   # Automated unit & integration test suite (168 tests across 47 suites)
 │       ├── helpers/db.js        # In-memory test database runner
 │       ├── health.test.js       # Health check & 404 tests
 │       ├── auth.test.js         # Authentication tests
@@ -135,7 +135,7 @@ npm run migrate:workspaces
 ```powershell
 npm test
 ```
-The test suite executes 163 automated tests across 46 test suites using Node's native test runner (`node:test`) with an isolated in-memory MongoDB instance. No external database connection is required.
+The test suite executes 168 automated tests across 47 test suites using Node's native test runner (`node:test`) with an isolated in-memory MongoDB instance. No external database connection is required.
 
 ---
 
@@ -206,3 +206,5 @@ The frontend is implemented as a lightweight, framework-free single-page interfa
 - [x] **Milestone G — Final Integration, Release Validation & Project Completion**: Full 15-step business workflow integration test suite, explicit line-item usage reconciliation, demonstration checklist (`PROJECT_DEMO.md`), master test plan (`TEST_PLAN.md`), academic report notes (`PROJECT_REPORT_NOTES.md`).
 - [x] **Full-Stack Phase 1 — Frontend Foundation**: Vanilla HTML5, CSS3, and JavaScript web frontend, responsive SaaS dashboard shell, forms with client-side validation, password visibility toggles, submit debounce protection, session expiration handling, Express static asset serving, 149 passing automated tests.
 - [x] **Full-Stack Phase 2 — Core Management Screens**: Comprehensive vanilla management screens for Tracked Services (`services.html`), Usage Ingestion & History (`usage.html`), Invoices & Reconciled Line Items (`billing.html`), and Budgets, Alerts & Linear Run-Rate Forecasting (`budgets.html`). Zero-build, standards-compliant, CSP-protected, workspace-scoped, with 155 passing automated tests.
+- [x] **Full-Stack Phase 3 — Full Frontend Integration & Cross-Module Consistency**: Unified workspace picker, persistent workspace switching, active navigation state, cross-module invoice/alert notifications, accessible aria labels and safe DOM rendering (163 passing tests).
+- [x] **Milestone Nov 16 — Authentication, Session & RBAC Hardening**: Server-side role returns on `/api/auth/me` and `/api/auth/login`, strict registration email/name validation, suspended membership login blocking (403), client-side JWT expiration auto-clearing, pre-flight form validation, RBAC-aware UI disablement, and comprehensive security testing (168 passing tests across 47 suites).

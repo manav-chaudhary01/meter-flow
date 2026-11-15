@@ -36,18 +36,116 @@ describe("Frontend Static Serving & Security Boundaries", () => {
     assert.match(res.text, /--color-primary/);
   });
 
-  it("GET /js/api.js should serve the API client module with application/javascript", async () => {
+  it("GET /js/api.js should serve the API client module with safe DOM and robust session handling", async () => {
     const res = await request(app).get("/js/api.js");
     assert.equal(res.status, 200);
     assert.match(res.headers["content-type"], /javascript/);
     assert.match(res.text, /MeterFlowAPI/);
+    assert.doesNotMatch(res.text, /\.innerHTML\s*=/);
+    assert.doesNotMatch(res.text, /\.outerHTML\s*=/);
+    assert.doesNotMatch(res.text, /\bwindow\.alert\s*\(/);
+    assert.doesNotMatch(res.text, /\balert\s*\(/);
+    assert.doesNotMatch(res.text, /\bwindow\.confirm\s*\(/);
+    assert.doesNotMatch(res.text, /\bconfirm\s*\(/);
+
+    // Run in isolated VM to verify JWT parsing, session handling, and auth error formatting
+    const storage = new Map();
+    const mockLocalStorage = {
+      getItem: (k) => storage.get(k) || null,
+      setItem: (k, v) => storage.set(k, String(v)),
+      removeItem: (k) => storage.delete(k),
+      clear: () => storage.clear()
+    };
+    const sandbox = {
+      window: { location: { origin: "http://localhost:3000", pathname: "/" } },
+      localStorage: mockLocalStorage,
+      atob: (str) => Buffer.from(str, "base64").toString("binary"),
+      Buffer
+    };
+    sandbox.window.localStorage = mockLocalStorage;
+    vm.runInNewContext(res.text, sandbox);
+    const api = sandbox.window.MeterFlowAPI;
+    assert.ok(api, "MeterFlowAPI should be exposed on window");
+
+    // 1. parseJwtPayload tests
+    const samplePayload = { userId: "user-123", tenantId: "tenant-456", exp: Math.floor(Date.now() / 1000) + 3600 };
+    const base64Payload = Buffer.from(JSON.stringify(samplePayload)).toString("base64url");
+    const validToken = `header.${base64Payload}.signature`;
+
+    const parsed = api.parseJwtPayload(validToken);
+    assert.equal(parsed.userId, "user-123");
+    assert.equal(parsed.tenantId, "tenant-456");
+    assert.equal(api.parseJwtPayload("not-a-token"), null);
+    assert.equal(api.parseJwtPayload("a.b"), null);
+    assert.equal(api.parseJwtPayload(null), null);
+
+    // 2. isAuthenticated tests
+    // Case A: Storage empty -> false
+    assert.equal(api.isAuthenticated(), false);
+
+    // Case B: Token exists but user is null -> false, session auto-cleared
+    api.setToken(validToken);
+    assert.equal(api.isAuthenticated(), false);
+    assert.equal(api.getToken(), null); // verified cleared
+
+    // Case C: Expired token -> false, session auto-cleared
+    const expiredPayload = { userId: "user-123", exp: Math.floor(Date.now() / 1000) - 3600 };
+    const expiredToken = `header.${Buffer.from(JSON.stringify(expiredPayload)).toString("base64url")}.sig`;
+    api.setToken(expiredToken);
+    api.setUser({ id: "user-123", email: "test@example.com" });
+    assert.equal(api.isAuthenticated(), false);
+    assert.equal(api.getToken(), null);
+    assert.equal(api.getUser(), null);
+
+    // Case D: Valid unexpired token and user -> true
+    api.setToken(validToken);
+    api.setUser({ id: "user-123", email: "test@example.com" });
+    assert.equal(api.isAuthenticated(), true);
+
+    // 3. formatAuthErrorMessage tests
+    assert.match(api.formatAuthErrorMessage({ status: 401 }), /session has expired/i);
+    assert.match(api.formatAuthErrorMessage({ status: 403, message: "Access denied: your workspace membership is suspended or inactive" }), /suspended or inactive/i);
+    assert.match(api.formatAuthErrorMessage({ status: 403, message: "Access denied: you are not an active member of this workspace" }), /not an active member/i);
+    assert.match(api.formatAuthErrorMessage({ status: 403, message: "Forbidden: this action requires one of the following roles: owner, admin" }), /administrative action/i);
+    assert.equal(api.formatAuthErrorMessage({ status: 500, message: "Internal server error" }), "Internal server error");
   });
 
-  it("GET /js/auth.js should serve the auth module with application/javascript", async () => {
+  it("GET /js/auth.js should serve the auth module with client validation and auth guards", async () => {
     const res = await request(app).get("/js/auth.js");
     assert.equal(res.status, 200);
     assert.match(res.headers["content-type"], /javascript/);
     assert.match(res.text, /MeterFlowAuth/);
+    assert.doesNotMatch(res.text, /\.innerHTML\s*=/);
+    assert.doesNotMatch(res.text, /\.outerHTML\s*=/);
+    assert.doesNotMatch(res.text, /\bwindow\.alert\s*\(/);
+    assert.doesNotMatch(res.text, /\balert\s*\(/);
+    assert.doesNotMatch(res.text, /\bwindow\.confirm\s*\(/);
+    assert.doesNotMatch(res.text, /\bconfirm\s*\(/);
+
+    // Run in isolated VM to verify validation helpers
+    const sandbox = {
+      window: {},
+      document: {
+        getElementById: () => null,
+        addEventListener: () => {}
+      }
+    };
+    vm.runInNewContext(res.text, sandbox);
+    const auth = sandbox.window.MeterFlowAuth;
+    assert.ok(auth, "MeterFlowAuth should be exposed on window");
+
+    // 1. validateLoginForm
+    assert.equal(auth.validateLoginForm({ email: "", password: "" }).valid, false);
+    assert.match(auth.validateLoginForm({ email: "", password: "pwd" }).error, /enter both email and password/i);
+    assert.match(auth.validateLoginForm({ email: "invalid-email", password: "pwd" }).error, /valid email/i);
+    assert.equal(auth.validateLoginForm({ email: "user@example.com", password: "pwd" }).valid, true);
+
+    // 2. validateRegisterForm
+    assert.equal(auth.validateRegisterForm({ name: "", email: "", password: "", organizationName: "" }).valid, false);
+    assert.match(auth.validateRegisterForm({ name: "A", email: "user@example.com", password: "password", organizationName: "Org" }).error, /at least 2 characters/i);
+    assert.match(auth.validateRegisterForm({ name: "User", email: "bad-email", password: "password", organizationName: "Org" }).error, /valid email/i);
+    assert.match(auth.validateRegisterForm({ name: "User", email: "user@example.com", password: "123", organizationName: "Org" }).error, /at least 6 characters/i);
+    assert.equal(auth.validateRegisterForm({ name: "User", email: "user@example.com", password: "secretPassword", organizationName: "Acme Corp" }).valid, true);
   });
 
   it("GET /js/dashboard.js should serve the dashboard controller with safe DOM & valid pure helpers", async () => {

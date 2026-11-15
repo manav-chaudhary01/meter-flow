@@ -12,7 +12,8 @@ router.get("/me", authenticateToken, (req, res) => {
     success: true,
     data: {
       userId: req.user.userId,
-      tenantId: req.user.tenantId
+      tenantId: req.user.tenantId,
+      role: req.user.role
     }
   });
 });

@@ -22,6 +22,21 @@ export async function register(req, res) {
       });
     }
 
+    if (typeof name !== "string" || name.trim().length < 2) {
+      return res.status(400).json({
+        success: false,
+        message: "Name must be at least 2 characters long"
+      });
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (typeof email !== "string" || !emailRegex.test(email.trim())) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid email address format"
+      });
+    }
+
     if (typeof password !== "string" || password.length < 6) {
       return res.status(400).json({
         success: false,
@@ -97,7 +112,8 @@ export async function register(req, res) {
           id: user._id,
           name: user.name,
           email: user.email,
-          tenantId: user.tenantId
+          tenantId: user.tenantId,
+          role: createdMembership?.role || "owner"
         },
         tenant: {
           id: createdTenant._id,
@@ -115,6 +131,14 @@ export async function register(req, res) {
     }
     if (createdTenant?._id) {
       await Tenant.findByIdAndDelete(createdTenant._id).catch(() => {});
+    }
+
+    if (error.name === "ValidationError") {
+      const messages = Object.values(error.errors || {}).map((err) => err.message);
+      return res.status(400).json({
+        success: false,
+        message: messages.join("; ") || "Validation failed"
+      });
     }
 
     return res.status(500).json({
@@ -169,6 +193,31 @@ export async function login(req, res) {
       });
     }
 
+    // Verify membership status for workspace
+    const existingMembership = await Membership.findOne({
+      userId: user._id,
+      tenantId: user.tenantId
+    });
+
+    if (existingMembership && existingMembership.status !== "active") {
+      // Check if user has an alternative active workspace
+      const otherActiveMembership = await Membership.findOne({
+        userId: user._id,
+        status: "active"
+      });
+
+      if (!otherActiveMembership) {
+        return res.status(403).json({
+          success: false,
+          message: "Access denied: your workspace membership is suspended or inactive"
+        });
+      }
+
+      // Point user to their active workspace
+      user.tenantId = otherActiveMembership.tenantId;
+      await user.save();
+    }
+
     // Ensure membership exists for active workspace
     let membership = await Membership.findOne({
       userId: user._id,
@@ -205,7 +254,8 @@ export async function login(req, res) {
           id: user._id,
           name: user.name,
           email: user.email,
-          tenantId: user.tenantId
+          tenantId: user.tenantId,
+          role: membership?.role || "member"
         },
         tenant: {
           id: tenant._id,

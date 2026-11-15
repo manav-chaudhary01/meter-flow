@@ -8,10 +8,50 @@
 
   const api = window.MeterFlowAPI;
 
+  const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+  function validateLoginForm(formData) {
+    const email = (formData?.email || "").trim();
+    const password = formData?.password || "";
+
+    if (!email || !password) {
+      return { valid: false, error: "Please enter both email and password." };
+    }
+    if (!EMAIL_REGEX.test(email)) {
+      return { valid: false, error: "Please enter a valid email address." };
+    }
+    return { valid: true, error: null };
+  }
+
+  function validateRegisterForm(formData) {
+    const name = (formData?.name || "").trim();
+    const email = (formData?.email || "").trim();
+    const password = formData?.password || "";
+    const organizationName = (formData?.organizationName || "").trim();
+
+    if (!name || !email || !password || !organizationName) {
+      return { valid: false, error: "All fields are required." };
+    }
+    if (name.length < 2) {
+      return { valid: false, error: "Name must be at least 2 characters long." };
+    }
+    if (!EMAIL_REGEX.test(email)) {
+      return { valid: false, error: "Please enter a valid email address." };
+    }
+    if (password.length < 6) {
+      return { valid: false, error: "Password must be at least 6 characters long." };
+    }
+    return { valid: true, error: null };
+  }
+
   const auth = {
+    validateLoginForm,
+    validateRegisterForm,
+
     // Check authentication for protected pages
     requireAuth() {
-      if (!api.isAuthenticated()) {
+      const apiClient = window.MeterFlowAPI || api;
+      if (!apiClient || !apiClient.isAuthenticated()) {
         window.location.href = "login.html";
         return false;
       }
@@ -20,7 +60,8 @@
 
     // Redirect already authenticated users away from login/register pages
     redirectIfAuthenticated() {
-      if (api.isAuthenticated()) {
+      const apiClient = window.MeterFlowAPI || api;
+      if (apiClient && apiClient.isAuthenticated()) {
         window.location.href = "index.html";
         return true;
       }
@@ -29,7 +70,10 @@
 
     // Log out user cleanly
     logout() {
-      api.clearSession();
+      const apiClient = window.MeterFlowAPI || api;
+      if (apiClient) {
+        apiClient.clearSession();
+      }
       window.location.href = "login.html?logged_out=true";
     },
 
@@ -69,13 +113,15 @@
         form.addEventListener("submit", async (e) => {
           e.preventDefault();
           if (errorBanner) errorBanner.style.display = "none";
+          if (infoBanner) infoBanner.style.display = "none";
 
           const email = document.getElementById("email")?.value.trim();
           const password = passwordInput?.value;
 
           // Client-side validation
-          if (!email || !password) {
-            showError("Please enter both email and password.");
+          const validation = validateLoginForm({ email, password });
+          if (!validation.valid) {
+            showError(validation.error);
             return;
           }
 
@@ -83,11 +129,12 @@
           setSubmitting(true);
 
           try {
-            const res = await api.post("/api/auth/login", { email, password });
+            const apiClient = window.MeterFlowAPI || api;
+            const res = await apiClient.post("/api/auth/login", { email, password });
             if (res.success && res.data) {
-              api.setToken(res.data.token);
-              api.setUser(res.data.user);
-              api.setTenant(res.data.tenant);
+              apiClient.setToken(res.data.token);
+              apiClient.setUser(res.data.user);
+              apiClient.setTenant(res.data.tenant);
 
               // Redirect to dashboard
               window.location.href = "index.html";
@@ -96,7 +143,7 @@
               setSubmitting(false);
             }
           } catch (err) {
-            showError(err.message || "An unexpected error occurred. Please try again.");
+            showError(err.message || "Invalid email or password");
             setSubmitting(false);
           }
         });
@@ -156,13 +203,14 @@
           const workspaceType = document.getElementById("workspace-type")?.value || "organization";
 
           // Client-side validation
-          if (!name || !email || !password || !organizationName) {
-            showError("All fields are required.");
-            return;
-          }
-
-          if (password.length < 6) {
-            showError("Password must be at least 6 characters long.");
+          const validation = validateRegisterForm({
+            name,
+            email,
+            password,
+            organizationName
+          });
+          if (!validation.valid) {
+            showError(validation.error);
             return;
           }
 
@@ -170,7 +218,8 @@
           setSubmitting(true);
 
           try {
-            const res = await api.post("/api/auth/register", {
+            const apiClient = window.MeterFlowAPI || api;
+            const res = await apiClient.post("/api/auth/register", {
               name,
               email,
               password,
@@ -179,9 +228,9 @@
             });
 
             if (res.success && res.data) {
-              api.setToken(res.data.token);
-              api.setUser(res.data.user);
-              api.setTenant(res.data.tenant);
+              apiClient.setToken(res.data.token);
+              apiClient.setUser(res.data.user);
+              apiClient.setTenant(res.data.tenant);
 
               // Direct entry into newly provisioned workspace dashboard
               window.location.href = "index.html";
@@ -190,7 +239,9 @@
               setSubmitting(false);
             }
           } catch (err) {
-            showError(err.message || "An unexpected error occurred during registration.");
+            const apiClient = window.MeterFlowAPI || api;
+            const errorMsg = apiClient?.formatAuthErrorMessage ? apiClient.formatAuthErrorMessage(err) : (err.message || "An unexpected error occurred during registration.");
+            showError(errorMsg);
             setSubmitting(false);
           }
         });
