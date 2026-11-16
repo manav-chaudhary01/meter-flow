@@ -42,7 +42,7 @@ meter-flow/
 │   │   ├── routes/              # Express API route modules
 │   │   ├── services/            # Pure calculation & evaluation engines (billingCalculator, spendCalculator, spendForecaster, alertEvaluator)
 │   │   └── utils/               # Migration & workspace backfill utilities
-│   └── tests/                   # Automated unit & integration test suite (168 tests across 47 suites)
+│   └── tests/                   # Automated unit & integration test suite (190 tests across 53 suites)
 │       ├── helpers/db.js        # In-memory test database runner
 │       ├── health.test.js       # Health check & 404 tests
 │       ├── auth.test.js         # Authentication tests
@@ -135,7 +135,7 @@ npm run migrate:workspaces
 ```powershell
 npm test
 ```
-The test suite executes 168 automated tests across 47 test suites using Node's native test runner (`node:test`) with an isolated in-memory MongoDB instance. No external database connection is required.
+The test suite executes 190 automated tests across 53 test suites using Node's native test runner (`node:test`) with an isolated in-memory MongoDB instance. No external database connection is required.
 
 ---
 
@@ -208,3 +208,4 @@ The frontend is implemented as a lightweight, framework-free single-page interfa
 - [x] **Full-Stack Phase 2 — Core Management Screens**: Comprehensive vanilla management screens for Tracked Services (`services.html`), Usage Ingestion & History (`usage.html`), Invoices & Reconciled Line Items (`billing.html`), and Budgets, Alerts & Linear Run-Rate Forecasting (`budgets.html`). Zero-build, standards-compliant, CSP-protected, workspace-scoped, with 155 passing automated tests.
 - [x] **Full-Stack Phase 3 — Full Frontend Integration & Cross-Module Consistency**: Unified workspace picker, persistent workspace switching, active navigation state, cross-module invoice/alert notifications, accessible aria labels and safe DOM rendering (163 passing tests).
 - [x] **Milestone Nov 16 — Authentication, Session & RBAC Hardening**: Server-side role returns on `/api/auth/me` and `/api/auth/login`, strict registration email/name validation, suspended membership login blocking (403), client-side JWT expiration auto-clearing, pre-flight form validation, RBAC-aware UI disablement, and comprehensive security testing (168 passing tests across 47 suites).
+- [x] **Milestone Nov 17 — Multi-Tenant / Workspace Isolation & Authorization Audit**: Exhaustive multi-tenant security verification across all workspace-scoped subsystems (services, usage, billing, budgets, alerts, memberships), adversarial cross-tenant infiltration testing, tenant-scoped compound idempotency index validation, workspace switching security lifecycle (A1 -> A2 -> A1), request body/query tenantId injection immunity, error sanitization, and live browser verification (190 passing tests across 53 suites).
