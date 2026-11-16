@@ -5,7 +5,7 @@ export async function createResource(req, res) {
   try {
     const { name, unit, price } = req.body;
 
-    if (!name || !unit || price === undefined) {
+    if (!name || !unit || typeof name !== "string" || typeof unit !== "string" || price === undefined) {
       return res.status(400).json({
         success: false,
         message: "Name, unit and price are required"
@@ -127,7 +127,7 @@ export async function updateResource(req, res) {
       });
     }
 
-    if (!name || !unit || price === undefined) {
+    if (!name || !unit || typeof name !== "string" || typeof unit !== "string" || price === undefined) {
       return res.status(400).json({
         success: false,
         message: "Name, unit and price are required"

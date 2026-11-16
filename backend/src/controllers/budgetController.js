@@ -213,10 +213,22 @@ export async function listBudgets(req, res) {
       tenantId: req.user.tenantId
     };
 
-    if (status) {
+    if (status !== undefined) {
+      if (typeof status !== "string" || status.trim().startsWith("$") || status.trim().length > 50) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid status filter"
+        });
+      }
       query.status = status.trim();
     }
-    if (currency) {
+    if (currency !== undefined) {
+      if (typeof currency !== "string" || currency.trim().startsWith("$") || currency.trim().length > 10) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid currency filter"
+        });
+      }
       query.currency = currency.trim().toUpperCase();
     }
 
@@ -521,8 +533,22 @@ export async function listAlerts(req, res) {
       tenantId: req.user.tenantId
     };
 
-    if (status) query.status = status.trim();
-    if (budgetId && mongoose.Types.ObjectId.isValid(budgetId)) {
+    if (status !== undefined) {
+      if (typeof status !== "string" || status.trim().startsWith("$") || status.trim().length > 50) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid status filter"
+        });
+      }
+      query.status = status.trim();
+    }
+    if (budgetId !== undefined) {
+      if (typeof budgetId !== "string" || !mongoose.Types.ObjectId.isValid(budgetId)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid budgetId filter"
+        });
+      }
       query.budgetId = budgetId;
     }
 

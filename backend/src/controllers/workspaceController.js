@@ -46,7 +46,7 @@ export async function createWorkspace(req, res) {
   try {
     const { name, type } = req.body;
 
-    if (!name) {
+    if (!name || typeof name !== "string") {
       return res.status(400).json({
         success: false,
         message: "Workspace name is required"
@@ -54,7 +54,7 @@ export async function createWorkspace(req, res) {
     }
 
     const normalizedName = name.trim();
-    const chosenType = (type || "organization").trim().toLowerCase();
+    const chosenType = (typeof type === "string" ? type : "organization").trim().toLowerCase();
 
     if (normalizedName.length < 2 || normalizedName.length > 100) {
       return res.status(400).json({
@@ -263,14 +263,14 @@ export async function addWorkspaceMember(req, res) {
       });
     }
 
-    if (!email) {
+    if (!email || typeof email !== "string") {
       return res.status(400).json({
         success: false,
         message: "Member email is required"
       });
     }
 
-    const chosenRole = (role || "member").trim().toLowerCase();
+    const chosenRole = (typeof role === "string" ? role : "member").trim().toLowerCase();
     if (!["admin", "member"].includes(chosenRole)) {
       return res.status(400).json({
         success: false,

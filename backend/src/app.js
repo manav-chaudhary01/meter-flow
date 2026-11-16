@@ -18,9 +18,79 @@ const frontendDir = path.resolve(__dirname, "../../frontend");
 
 const app = express();
 
-app.use(helmet());
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        scriptSrcAttr: ["'none'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:"],
+        connectSrc: ["'self'"],
+        fontSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        baseUri: ["'self'"],
+        formAction: ["'self'"],
+        frameAncestors: ["'none'"]
+      }
+    },
+    frameguard: { action: "deny" }
+  })
+);
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "500kb" }));
+
+// Middleware to intercept malformed JSON syntax errors or payload-too-large errors
+app.use((err, req, res, next) => {
+  if (err instanceof SyntaxError && err.status === 400 && "body" in err) {
+    return res.status(400).json({
+      success: false,
+      message: "Malformed JSON payload in request body"
+    });
+  }
+  if (err.type === "entity.too.large" || err.status === 413) {
+    return res.status(413).json({
+      success: false,
+      message: "Payload too large (maximum allowed size: 500kb)"
+    });
+  }
+  next(err);
+});
+
+// Query parameter sanitization and parameter pollution / operator injection prevention
+app.use((req, res, next) => {
+  for (const [key, val] of Object.entries(req.query || {})) {
+    if (
+      key.includes("[") ||
+      key.includes("]") ||
+      key.startsWith("$") ||
+      key === "__proto__" ||
+      key === "constructor" ||
+      key === "prototype"
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid query parameter: operator injection or bracketed keys are not permitted"
+      });
+    }
+
+    if (Array.isArray(val)) {
+      return res.status(400).json({
+        success: false,
+        message: `Parameter pollution detected for query parameter: '${key}'`
+      });
+    }
+
+    if (typeof val === "object" && val !== null) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid query parameter object for: '${key}'`
+      });
+    }
+  }
+  next();
+});
 
 app.get("/api/health", (req, res) => {
   const isConnected = mongoose.connection && mongoose.connection.readyState === 1;
@@ -50,8 +120,8 @@ app.use("/api", (req, res) => {
   });
 });
 
-// Safely serve static frontend files
-app.use(express.static(frontendDir));
+// Safely serve static frontend files with dotfiles denied
+app.use(express.static(frontendDir, { dotfiles: "deny" }));
 
 // Frontend navigation route shortcuts
 app.get("/", (req, res) => {
@@ -87,6 +157,9 @@ app.use((req, res) => {
 // Centralized error handling middleware with production sanitization
 // eslint-disable-next-line no-unused-vars
 export function errorHandler(err, req, res, next) {
+  if (res.headersSent) {
+    return next(err);
+  }
   console.error("Unhandled server error:", err);
   const status = err.status || 500;
   const isProduction = process.env.NODE_ENV === "production";

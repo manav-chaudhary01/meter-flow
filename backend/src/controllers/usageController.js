@@ -21,6 +21,40 @@ function parseQuantity(value) {
   }
 }
 
+function validateMetadataObject(metadata) {
+  if (metadata === undefined || metadata === null) return { value: null };
+  if (typeof metadata !== "object" || Array.isArray(metadata)) {
+    return { error: "Metadata must be a key-value object" };
+  }
+
+  function inspectKeys(obj, depth = 1) {
+    if (depth > 5) {
+      return "Metadata exceeds maximum nesting depth of 5";
+    }
+    const keys = Object.keys(obj);
+    if (keys.length > 50) {
+      return "Metadata exceeds maximum key count of 50";
+    }
+    for (const key of keys) {
+      if (key === "__proto__" || key === "constructor" || key === "prototype" || key.startsWith("$")) {
+        return `Prohibited metadata key: '${key}'`;
+      }
+      const val = obj[key];
+      if (val !== null && typeof val === "object" && !Array.isArray(val)) {
+        const err = inspectKeys(val, depth + 1);
+        if (err) return err;
+      }
+    }
+    return null;
+  }
+
+  const err = inspectKeys(metadata, 1);
+  if (err) {
+    return { error: err };
+  }
+  return { value: metadata };
+}
+
 function formatUsage(rec) {
   if (!rec) return null;
   const doc = rec.toObject ? rec.toObject({ flattenMaps: true }) : rec;
@@ -170,18 +204,39 @@ export async function ingestUsage(req, res) {
     }
 
     // 6. Validate metadata if provided
-    if (
-      metadata !== undefined &&
-      (typeof metadata !== "object" || metadata === null || Array.isArray(metadata))
-    ) {
+    if (metadata !== undefined) {
+      const metaCheck = validateMetadataObject(metadata);
+      if (metaCheck.error) {
+        return res.status(400).json({
+          success: false,
+          message: metaCheck.error
+        });
+      }
+    }
+
+    if (source !== undefined && (typeof source !== "string" || source.length > 50)) {
       return res.status(400).json({
         success: false,
-        message: "Metadata must be a key-value object"
+        message: "Source must be a string up to 50 characters"
       });
     }
 
-    const trimmedIdempotencyKey = idempotencyKey ? String(idempotencyKey).trim() : null;
-    const trimmedExternalEventId = externalEventId ? String(externalEventId).trim() : null;
+    if (idempotencyKey !== undefined && (typeof idempotencyKey !== "string" || idempotencyKey.length > 200)) {
+      return res.status(400).json({
+        success: false,
+        message: "idempotencyKey must be a string up to 200 characters"
+      });
+    }
+
+    if (externalEventId !== undefined && (typeof externalEventId !== "string" || externalEventId.length > 200)) {
+      return res.status(400).json({
+        success: false,
+        message: "externalEventId must be a string up to 200 characters"
+      });
+    }
+
+    const trimmedIdempotencyKey = idempotencyKey ? idempotencyKey.trim() : null;
+    const trimmedExternalEventId = externalEventId ? externalEventId.trim() : null;
 
     const incomingPayload = {
       serviceId,
@@ -301,8 +356,8 @@ export async function getUsageHistory(req, res) {
       tenantId: req.user.tenantId
     };
 
-    if (serviceId) {
-      if (!mongoose.Types.ObjectId.isValid(serviceId)) {
+    if (serviceId !== undefined) {
+      if (typeof serviceId !== "string" || !mongoose.Types.ObjectId.isValid(serviceId)) {
         return res.status(400).json({
           success: false,
           message: "Invalid serviceId parameter"
@@ -386,8 +441,23 @@ export async function getUsageSummary(req, res) {
       tenantId: tenantObjectId
     };
 
-    if (serviceId) {
-      if (!mongoose.Types.ObjectId.isValid(serviceId)) {
+    if (typeof groupBy !== "string") {
+      return res.status(400).json({
+        success: false,
+        message: "groupBy must be 'service', 'day', or 'month'"
+      });
+    }
+
+    const allowedGroupBy = ["service", "day", "month"];
+    if (!allowedGroupBy.includes(groupBy.trim())) {
+      return res.status(400).json({
+        success: false,
+        message: "groupBy must be 'service', 'day', or 'month'"
+      });
+    }
+
+    if (serviceId !== undefined) {
+      if (typeof serviceId !== "string" || !mongoose.Types.ObjectId.isValid(serviceId)) {
         return res.status(400).json({
           success: false,
           message: "Invalid serviceId parameter"
@@ -424,14 +494,6 @@ export async function getUsageSummary(req, res) {
           message: "startDate cannot be after endDate"
         });
       }
-    }
-
-    const allowedGroupBy = ["service", "day", "month"];
-    if (!allowedGroupBy.includes(groupBy)) {
-      return res.status(400).json({
-        success: false,
-        message: "groupBy must be 'service', 'day', or 'month'"
-      });
     }
 
     let pipeline = [];

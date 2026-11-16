@@ -72,10 +72,31 @@ export async function createService(req, res) {
       });
     }
 
-    if (!["metered", "subscription", "hybrid"].includes(trackingType)) {
+    if (provider !== undefined && typeof provider !== "string") {
+      return res.status(400).json({
+        success: false,
+        message: "Provider must be a string"
+      });
+    }
+
+    if (category !== undefined && typeof category !== "string") {
+      return res.status(400).json({
+        success: false,
+        message: "Category must be a string"
+      });
+    }
+
+    if (!trackingType || typeof trackingType !== "string" || !["metered", "subscription", "hybrid"].includes(trackingType)) {
       return res.status(400).json({
         success: false,
         message: "Tracking type must be 'metered', 'subscription', or 'hybrid'"
+      });
+    }
+
+    if (currency !== undefined && typeof currency !== "string") {
+      return res.status(400).json({
+        success: false,
+        message: "Currency must be a string"
       });
     }
 
@@ -90,8 +111,8 @@ export async function createService(req, res) {
     const serviceData = {
       tenantId: req.user.tenantId,
       name: normalizedName,
-      provider: provider ? provider.trim() : "",
-      category: category ? category.trim() : "general",
+      provider: typeof provider === "string" ? provider.trim() : "",
+      category: typeof category === "string" && category.trim() ? category.trim() : "general",
       trackingType,
       currency: normalizedCurrency,
       status: "active"
@@ -162,29 +183,35 @@ export async function getServices(req, res) {
       tenantId: req.user.tenantId
     };
 
-    if (status && status !== "all") {
-      if (!["active", "archived"].includes(status)) {
+    if (status !== undefined && status !== "all") {
+      if (typeof status !== "string" || !["active", "archived"].includes(status.trim())) {
         return res.status(400).json({
           success: false,
           message: "Status filter must be 'active', 'archived', or 'all'"
         });
       }
-      filter.status = status;
+      filter.status = status.trim();
     } else if (!status) {
       filter.status = "active";
     }
 
-    if (trackingType) {
-      if (!["metered", "subscription", "hybrid"].includes(trackingType)) {
+    if (trackingType !== undefined) {
+      if (typeof trackingType !== "string" || !["metered", "subscription", "hybrid"].includes(trackingType.trim())) {
         return res.status(400).json({
           success: false,
           message: "Invalid trackingType filter"
         });
       }
-      filter.trackingType = trackingType;
+      filter.trackingType = trackingType.trim();
     }
 
-    if (category) {
+    if (category !== undefined) {
+      if (typeof category !== "string" || category.trim().startsWith("$") || category.trim().length > 100) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid category filter"
+        });
+      }
       filter.category = category.trim();
     }
 
@@ -281,6 +308,12 @@ export async function updateService(req, res) {
     const updates = {};
 
     if (name !== undefined) {
+      if (typeof name !== "string") {
+        return res.status(400).json({
+          success: false,
+          message: "Service name must be a string"
+        });
+      }
       const normalizedName = name.trim();
       if (normalizedName.length < 2 || normalizedName.length > 100) {
         return res.status(400).json({
@@ -291,10 +324,33 @@ export async function updateService(req, res) {
       updates.name = normalizedName;
     }
 
-    if (provider !== undefined) updates.provider = provider.trim();
-    if (category !== undefined) updates.category = category.trim();
+    if (provider !== undefined) {
+      if (typeof provider !== "string") {
+        return res.status(400).json({
+          success: false,
+          message: "Provider must be a string"
+        });
+      }
+      updates.provider = provider.trim();
+    }
+
+    if (category !== undefined) {
+      if (typeof category !== "string") {
+        return res.status(400).json({
+          success: false,
+          message: "Category must be a string"
+        });
+      }
+      updates.category = category.trim();
+    }
 
     if (currency !== undefined) {
+      if (typeof currency !== "string") {
+        return res.status(400).json({
+          success: false,
+          message: "Currency must be a string"
+        });
+      }
       const normalizedCurrency = currency.trim().toUpperCase();
       if (!/^[A-Z]{3}$/.test(normalizedCurrency)) {
         return res.status(400).json({
@@ -306,20 +362,20 @@ export async function updateService(req, res) {
     }
 
     if (status !== undefined) {
-      if (!["active", "archived"].includes(status)) {
+      if (typeof status !== "string" || !["active", "archived"].includes(status.trim())) {
         return res.status(400).json({
           success: false,
           message: "Status must be 'active' or 'archived'"
         });
       }
-      updates.status = status;
+      updates.status = status.trim();
     }
 
     const effectiveType = existingService.trackingType;
 
     if (effectiveType === "metered" || effectiveType === "hybrid") {
       if (unit !== undefined) {
-        if (!unit.trim()) {
+        if (typeof unit !== "string" || !unit.trim()) {
           return res.status(400).json({
             success: false,
             message: "Unit cannot be empty for metered/hybrid service"

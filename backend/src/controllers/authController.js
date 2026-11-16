@@ -11,8 +11,42 @@ export async function register(req, res) {
   try {
     const { name, email, password, organizationName, workspaceName, workspaceType } = req.body;
 
-    const chosenWorkspaceName = (organizationName || workspaceName || "").trim();
-    const chosenType = (workspaceType || (organizationName ? "organization" : "personal")).trim().toLowerCase();
+    if (
+      !name ||
+      !email ||
+      !password ||
+      typeof name !== "string" ||
+      typeof email !== "string" ||
+      typeof password !== "string"
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Name, email, password and organization/workspace name are required"
+      });
+    }
+
+    const orgNameStr = typeof organizationName === "string" ? organizationName : "";
+    const wsNameStr = typeof workspaceName === "string" ? workspaceName : "";
+    const chosenWorkspaceName = (orgNameStr || wsNameStr).trim();
+
+    if (!chosenWorkspaceName) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Name, email, password and organization/workspace name are required"
+      });
+    }
+
+    const chosenType = (
+      typeof workspaceType === "string"
+        ? workspaceType
+        : organizationName
+        ? "organization"
+        : "personal"
+    )
+      .trim()
+      .toLowerCase();
 
     if (!name || !email || !password || !chosenWorkspaceName) {
       return res.status(400).json({
@@ -152,7 +186,7 @@ export async function login(req, res) {
   try {
     const { email, password } = req.body;
 
-    if (!email || !password) {
+    if (!email || !password || typeof email !== "string" || typeof password !== "string") {
       return res.status(400).json({
         success: false,
         message: "Email and password are required"

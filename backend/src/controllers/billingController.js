@@ -121,6 +121,13 @@ export async function generateBill(req, res) {
       });
     }
 
+    if (currency !== undefined && typeof currency !== "string") {
+      return res.status(400).json({
+        success: false,
+        message: "Currency must be a string"
+      });
+    }
+
     const normalizedCurrency = String(currency).trim().toUpperCase();
     if (!/^[A-Z]{3}$/.test(normalizedCurrency)) {
       return res.status(400).json({
@@ -264,7 +271,13 @@ export async function listBillingRecords(req, res) {
       tenantId: req.user.tenantId
     };
 
-    if (status) {
+    if (status !== undefined) {
+      if (typeof status !== "string" || status.trim().startsWith("$") || status.trim().length > 50) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid status filter"
+        });
+      }
       query.status = status.trim();
     }
 
