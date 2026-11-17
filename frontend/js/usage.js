@@ -230,6 +230,7 @@
   let totalPages = 1;
   let isSubmittingIngest = false;
   let bannerTimeout = null;
+  let lastFocusedElement = null;
 
   document.addEventListener("DOMContentLoaded", initUsagePage);
 
@@ -365,10 +366,21 @@
     const mobileBtn = document.getElementById("mobile-menu-btn");
     const sidebar = document.getElementById("sidebar");
     if (mobileBtn && sidebar) {
-      mobileBtn.addEventListener("click", () => sidebar.classList.toggle("open"));
+      mobileBtn.addEventListener("click", () => {
+        sidebar.classList.toggle("open");
+        mobileBtn.setAttribute("aria-expanded", String(sidebar.classList.contains("open")));
+      });
       document.addEventListener("click", (e) => {
         if (sidebar.classList.contains("open") && !sidebar.contains(e.target) && !mobileBtn.contains(e.target)) {
           sidebar.classList.remove("open");
+          mobileBtn.setAttribute("aria-expanded", "false");
+        }
+      });
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && sidebar.classList.contains("open")) {
+          sidebar.classList.remove("open");
+          mobileBtn.setAttribute("aria-expanded", "false");
+          mobileBtn.focus();
         }
       });
     }
@@ -518,14 +530,42 @@
     if (hint) hint.textContent = "Unit will be matched automatically from selected service.";
   }
 
+  function openModal(modalId, defaultFocusEl = null) {
+    const modal = document.getElementById(modalId);
+    if (!modal) return;
+    lastFocusedElement = document.activeElement;
+    modal.classList.add("open");
+    document.body.classList.add("modal-open");
+
+    if (defaultFocusEl && typeof defaultFocusEl.focus === "function") {
+      defaultFocusEl.focus();
+    } else {
+      const focusable = modal.querySelectorAll('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])');
+      if (focusable.length > 0) {
+        focusable[0].focus();
+      }
+    }
+  }
+
   function closeModal(modalId) {
     const modal = document.getElementById(modalId);
     if (!modal || !modal.classList.contains("open")) return;
     if (modalId === "ingest-modal" && isSubmittingIngest) return;
 
     modal.classList.remove("open");
+
+    const anyOpen = document.querySelectorAll(".modal-backdrop.open");
+    if (anyOpen.length === 0) {
+      document.body.classList.remove("modal-open");
+    }
+
     if (modalId === "ingest-modal") {
       resetIngestModalState();
+    }
+
+    if (lastFocusedElement && typeof lastFocusedElement.focus === "function") {
+      lastFocusedElement.focus();
+      lastFocusedElement = null;
     }
   }
 
@@ -537,8 +577,7 @@
     if (openBtn && ingestModal) {
       openBtn.addEventListener("click", () => {
         resetIngestModalState();
-        ingestModal.classList.add("open");
-        document.getElementById("ingest-service")?.focus();
+        openModal("ingest-modal", document.getElementById("ingest-service"));
       });
     }
 
@@ -558,9 +597,34 @@
     });
 
     document.addEventListener("keydown", (e) => {
+      const openBackdrop = document.querySelector(".modal-backdrop.open");
+      if (!openBackdrop) return;
+
       if (e.key === "Escape") {
-        if (metadataModal?.classList.contains("open")) closeModal("metadata-modal");
-        else if (ingestModal?.classList.contains("open")) closeModal("ingest-modal");
+        e.preventDefault();
+        closeModal(openBackdrop.id);
+        return;
+      }
+
+      if (e.key === "Tab") {
+        const focusable = Array.from(
+          openBackdrop.querySelectorAll('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')
+        );
+        if (focusable.length === 0) return;
+        const firstEl = focusable[0];
+        const lastEl = focusable[focusable.length - 1];
+
+        if (e.shiftKey) {
+          if (document.activeElement === firstEl || !openBackdrop.contains(document.activeElement)) {
+            e.preventDefault();
+            lastEl.focus();
+          }
+        } else {
+          if (document.activeElement === lastEl || !openBackdrop.contains(document.activeElement)) {
+            e.preventDefault();
+            firstEl.focus();
+          }
+        }
       }
     });
   }
@@ -1017,8 +1081,6 @@
     if (contentEl) {
       contentEl.textContent = JSON.stringify(record.metadata, null, 2);
     }
-    if (modal) {
-      modal.classList.add("open");
-    }
+    openModal("metadata-modal", modal?.querySelector("button[data-close-modal]"));
   }
 })(window);

@@ -200,6 +200,7 @@
   let isSubmittingEdit = false;
   let isSubmittingArchive = false;
   let successBannerTimeout = null;
+  let lastFocusedElement = null;
 
   document.addEventListener("DOMContentLoaded", initServicesPage);
 
@@ -304,10 +305,21 @@
     const mobileBtn = document.getElementById("mobile-menu-btn");
     const sidebar = document.getElementById("sidebar");
     if (mobileBtn && sidebar) {
-      mobileBtn.addEventListener("click", () => sidebar.classList.toggle("open"));
+      mobileBtn.addEventListener("click", () => {
+        sidebar.classList.toggle("open");
+        mobileBtn.setAttribute("aria-expanded", String(sidebar.classList.contains("open")));
+      });
       document.addEventListener("click", (e) => {
         if (sidebar.classList.contains("open") && !sidebar.contains(e.target) && !mobileBtn.contains(e.target)) {
           sidebar.classList.remove("open");
+          mobileBtn.setAttribute("aria-expanded", "false");
+        }
+      });
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && sidebar.classList.contains("open")) {
+          sidebar.classList.remove("open");
+          mobileBtn.setAttribute("aria-expanded", "false");
+          mobileBtn.focus();
         }
       });
     }
@@ -476,6 +488,23 @@
     if (nameEl) nameEl.textContent = "this service";
   }
 
+  function openModal(modalId, defaultFocusEl = null) {
+    const modal = document.getElementById(modalId);
+    if (!modal) return;
+    lastFocusedElement = document.activeElement;
+    modal.classList.add("open");
+    document.body.classList.add("modal-open");
+
+    if (defaultFocusEl && typeof defaultFocusEl.focus === "function") {
+      defaultFocusEl.focus();
+    } else {
+      const focusable = modal.querySelectorAll('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])');
+      if (focusable.length > 0) {
+        focusable[0].focus();
+      }
+    }
+  }
+
   function closeModal(modalId) {
     const modal = document.getElementById(modalId);
     if (!modal || !modal.classList.contains("open")) return;
@@ -486,9 +515,19 @@
 
     modal.classList.remove("open");
 
+    const anyOpen = document.querySelectorAll(".modal-backdrop.open");
+    if (anyOpen.length === 0) {
+      document.body.classList.remove("modal-open");
+    }
+
     if (modalId === "create-modal") resetCreateModalState();
     if (modalId === "edit-modal") resetEditModalState();
     if (modalId === "archive-modal") resetArchiveModalState();
+
+    if (lastFocusedElement && typeof lastFocusedElement.focus === "function") {
+      lastFocusedElement.focus();
+      lastFocusedElement = null;
+    }
   }
 
   function setupModals() {
@@ -504,8 +543,7 @@
           return;
         }
         resetCreateModalState();
-        createModal.classList.add("open");
-        document.getElementById("create-name")?.focus();
+        openModal("create-modal", document.getElementById("create-name"));
       });
     }
 
@@ -525,10 +563,35 @@
     });
 
     document.addEventListener("keydown", (e) => {
-      if (e.key !== "Escape") return;
-      if (archiveModal?.classList.contains("open")) closeModal("archive-modal");
-      else if (editModal?.classList.contains("open")) closeModal("edit-modal");
-      else if (createModal?.classList.contains("open")) closeModal("create-modal");
+      const openBackdrop = document.querySelector(".modal-backdrop.open");
+      if (!openBackdrop) return;
+
+      if (e.key === "Escape") {
+        e.preventDefault();
+        closeModal(openBackdrop.id);
+        return;
+      }
+
+      if (e.key === "Tab") {
+        const focusable = Array.from(
+          openBackdrop.querySelectorAll('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')
+        );
+        if (focusable.length === 0) return;
+        const firstEl = focusable[0];
+        const lastEl = focusable[focusable.length - 1];
+
+        if (e.shiftKey) {
+          if (document.activeElement === firstEl || !openBackdrop.contains(document.activeElement)) {
+            e.preventDefault();
+            lastEl.focus();
+          }
+        } else {
+          if (document.activeElement === lastEl || !openBackdrop.contains(document.activeElement)) {
+            e.preventDefault();
+            firstEl.focus();
+          }
+        }
+      }
     });
   }
 
@@ -656,7 +719,7 @@
     resetEditModalState();
     setEditFormInputsDisabled(true);
     if (loadingBanner) loadingBanner.style.display = "block";
-    if (modal) modal.classList.add("open");
+    openModal("edit-modal");
 
     try {
       const res = await api.get(`/api/services/${serviceId}`);
@@ -815,8 +878,7 @@
     if (cancelBtn) cancelBtn.disabled = false;
     hideModalError(errorBanner);
 
-    if (modal) modal.classList.add("open");
-    cancelBtn?.focus();
+    openModal("archive-modal", cancelBtn);
   }
 
   function setupArchiveModal() {

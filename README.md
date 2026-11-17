@@ -42,7 +42,7 @@ meter-flow/
 │   │   ├── routes/              # Express API route modules
 │   │   ├── services/            # Pure calculation & evaluation engines (billingCalculator, spendCalculator, spendForecaster, alertEvaluator)
 │   │   └── utils/               # Migration & workspace backfill utilities
-│   └── tests/                   # Automated unit & integration test suite (211 tests across 61 suites)
+│   └── tests/                   # Automated unit & integration test suite (247 tests across 68 suites)
 │       ├── helpers/db.js        # In-memory test database runner
 │       ├── health.test.js       # Health check & 404 tests
 │       ├── auth.test.js         # Authentication tests
@@ -55,6 +55,7 @@ meter-flow/
 │       ├── e2eWorkflow.test.js  # Milestone G 15-step end-to-end integration lifecycle tests
 │       ├── frontendServing.test.js # Frontend static serving, routing & security boundary tests (21 tests)
 │       ├── securityHardening.test.js # Application security, CSP, input validation, prototype pollution & error sanitization tests (21 tests)
+│       ├── responsiveA11yUx.test.js # Responsive UI, WCAG AA accessibility, focus trapping & UX tests (36 tests)
 │       ├── resource.test.js     # Resource CRUD tests
 │       ├── tenantIsolation.test.js # Multi-tenant isolation tests
 │       └── migration.test.js    # Idempotent migration verification
@@ -211,3 +212,4 @@ The frontend is implemented as a lightweight, framework-free single-page interfa
 - [x] **Milestone Nov 16 — Authentication, Session & RBAC Hardening**: Server-side role returns on `/api/auth/me` and `/api/auth/login`, strict registration email/name validation, suspended membership login blocking (403), client-side JWT expiration auto-clearing, pre-flight form validation, RBAC-aware UI disablement, and comprehensive security testing (168 passing tests across 47 suites).
 - [x] **Milestone Nov 17 — Multi-Tenant / Workspace Isolation & Authorization Audit**: Exhaustive multi-tenant security verification across all workspace-scoped subsystems (services, usage, billing, budgets, alerts, memberships), adversarial cross-tenant infiltration testing, tenant-scoped compound idempotency index validation, workspace switching security lifecycle (A1 -> A2 -> A1), request body/query tenantId injection immunity, error sanitization, and live browser verification (190 passing tests across 53 suites).
 - [x] **Milestone Nov 18 — Security, CSP & Input Validation Audit**: Complete application-security audit across the stack. Hardened Helmet Content Security Policy (strict script/object/frame restrictions, anti-clickjacking DENY), request body size limit (500kb) and malformed JSON syntax error sanitization, parameter pollution prevention and query operator injection immunity across all list/filter endpoints, prototype pollution defense with recursive metadata validation and depth limits, path traversal immunity for static files, XSS adversarial string neutralization with 100% safe native DOM sinks, production error sanitization, and real browser verification (211 passing tests across 61 suites).
+- [x] **Milestone Nov 19 — Responsive UI, Accessibility (A11y) & UX Polish**: Cross-device responsive design across Desktop (1440px/1280px), Tablet (1024px/768px), and Mobile (430px/390px/360px) viewports; full WCAG AA accessibility compliance with keyboard skip-links, high-contrast :focus-visible outlines, accessible explicit form labels, and horizontal scroll region accessibility (tabindex="0" role="region"); accessible modal lifecycle with complete Tab focus trapping, background scroll prevention (body.modal-open), Escape-to-dismiss, and trigger button focus restoration; mobile slide-out navigation drawer with smooth animations and Escape handling; minimum 44x44px touch targets on coarse pointers; user preference prefers-reduced-motion support; comprehensive automated testing (247 passing tests across 68 suites) and live browser verification.

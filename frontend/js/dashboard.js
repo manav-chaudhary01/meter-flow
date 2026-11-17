@@ -237,11 +237,21 @@
     if (mobileBtn && sidebar) {
       mobileBtn.addEventListener("click", () => {
         sidebar.classList.toggle("open");
+        mobileBtn.setAttribute("aria-expanded", String(sidebar.classList.contains("open")));
       });
 
       document.addEventListener("click", (e) => {
         if (sidebar.classList.contains("open") && !sidebar.contains(e.target) && !mobileBtn.contains(e.target)) {
           sidebar.classList.remove("open");
+          mobileBtn.setAttribute("aria-expanded", "false");
+        }
+      });
+
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && sidebar.classList.contains("open")) {
+          sidebar.classList.remove("open");
+          mobileBtn.setAttribute("aria-expanded", "false");
+          mobileBtn.focus();
         }
       });
     }

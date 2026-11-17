@@ -174,6 +174,7 @@
   let totalPages = 1;
   let cachedBills = [];
   let currentlyViewedBillId = null;
+  let lastFocusedElement = null;
 
   document.addEventListener("DOMContentLoaded", initBillingPage);
 
@@ -237,7 +238,10 @@
     const mobileBtn = document.getElementById("mobile-menu-btn");
     const sidebar = document.getElementById("sidebar");
     if (mobileBtn && sidebar) {
-      mobileBtn.addEventListener("click", () => sidebar.classList.toggle("open"));
+      mobileBtn.addEventListener("click", () => {
+        sidebar.classList.toggle("open");
+        mobileBtn.setAttribute("aria-expanded", String(sidebar.classList.contains("open")));
+      });
       document.addEventListener("click", (e) => {
         if (
           sidebar.classList.contains("open") &&
@@ -245,6 +249,14 @@
           !mobileBtn.contains(e.target)
         ) {
           sidebar.classList.remove("open");
+          mobileBtn.setAttribute("aria-expanded", "false");
+        }
+      });
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && sidebar.classList.contains("open")) {
+          sidebar.classList.remove("open");
+          mobileBtn.setAttribute("aria-expanded", "false");
+          mobileBtn.focus();
         }
       });
     }
@@ -323,9 +335,37 @@
     }
   }
 
+  function openModal(modalId, defaultFocusEl = null) {
+    const modal = document.getElementById(modalId);
+    if (!modal) return;
+    lastFocusedElement = document.activeElement;
+    modal.classList.add("open");
+    document.body.classList.add("modal-open");
+
+    if (defaultFocusEl && typeof defaultFocusEl.focus === "function") {
+      defaultFocusEl.focus();
+    } else {
+      const focusable = modal.querySelectorAll('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])');
+      if (focusable.length > 0) {
+        focusable[0].focus();
+      }
+    }
+  }
+
   function closeModal(modalId) {
     const modal = document.getElementById(modalId);
-    if (modal) modal.classList.remove("open");
+    if (!modal || !modal.classList.contains("open")) return;
+    modal.classList.remove("open");
+
+    const anyOpen = document.querySelectorAll(".modal-backdrop.open");
+    if (anyOpen.length === 0) {
+      document.body.classList.remove("modal-open");
+    }
+
+    if (lastFocusedElement && typeof lastFocusedElement.focus === "function") {
+      lastFocusedElement.focus();
+      lastFocusedElement = null;
+    }
   }
 
   function applyRolePermissions(role) {
@@ -384,14 +424,14 @@
         }
 
         hideModalError();
-        genModal.classList.add("open");
+        openModal("generate-modal", startInput);
       });
     }
 
     if (detailsViewUsageBtn) {
       detailsViewUsageBtn.addEventListener("click", () => {
         if (currentlyViewedBillId) {
-          if (detailsModal) detailsModal.classList.remove("open");
+          closeModal("details-modal");
           openReconciledUsageModal(currentlyViewedBillId);
         }
       });
@@ -400,16 +440,47 @@
     document.querySelectorAll("[data-close-modal]").forEach((btn) => {
       btn.addEventListener("click", () => {
         const modalId = btn.getAttribute("data-close-modal");
-        const modal = document.getElementById(modalId);
-        if (modal) modal.classList.remove("open");
+        closeModal(modalId);
       });
     });
 
     [genModal, detailsModal, usageModal].forEach((modal) => {
       if (modal) {
         modal.addEventListener("click", (e) => {
-          if (e.target === modal) modal.classList.remove("open");
+          if (e.target === modal) closeModal(modal.id);
         });
+      }
+    });
+
+    document.addEventListener("keydown", (e) => {
+      const openBackdrop = document.querySelector(".modal-backdrop.open");
+      if (!openBackdrop) return;
+
+      if (e.key === "Escape") {
+        e.preventDefault();
+        closeModal(openBackdrop.id);
+        return;
+      }
+
+      if (e.key === "Tab") {
+        const focusable = Array.from(
+          openBackdrop.querySelectorAll('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')
+        );
+        if (focusable.length === 0) return;
+        const firstEl = focusable[0];
+        const lastEl = focusable[focusable.length - 1];
+
+        if (e.shiftKey) {
+          if (document.activeElement === firstEl || !openBackdrop.contains(document.activeElement)) {
+            e.preventDefault();
+            lastEl.focus();
+          }
+        } else {
+          if (document.activeElement === lastEl || !openBackdrop.contains(document.activeElement)) {
+            e.preventDefault();
+            firstEl.focus();
+          }
+        }
       }
     });
   }
@@ -915,7 +986,7 @@
     if (subtotalEl) subtotalEl.textContent = formatCurrency(bill.subtotal, bill.currency);
     if (totalEl) totalEl.textContent = formatCurrency(bill.total, bill.currency);
 
-    if (modal) modal.classList.add("open");
+    openModal("details-modal", modal?.querySelector("button[data-close-modal]"));
   }
 
   // --- Safe DOM Rendering for Reconciled Usage Modal ---
@@ -943,7 +1014,7 @@
       bodyEl.appendChild(loadingRow);
     }
 
-    if (modal) modal.classList.add("open");
+    openModal("usage-modal", modal?.querySelector("button[data-close-modal]"));
 
     try {
       const res = await api.get(`/api/billing/${billId}/usage`);

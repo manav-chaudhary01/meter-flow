@@ -7,16 +7,17 @@
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
+  <a href="#main-content" class="skip-link">Skip to main content</a>
   <div class="auth-wrapper">
     <div class="auth-header">
       <div class="auth-logo">
-        <div class="auth-logo-icon">M</div>
+        <div class="auth-logo-icon" aria-hidden="true">M</div>
         <span>MeterFlow</span>
       </div>
       <p>Multi-Tenant SaaS Metered Billing Platform</p>
     </div>
 
-    <main class="auth-card">
+    <main id="main-content" class="auth-card" tabindex="-1">
       <h2>Welcome Back</h2>
       <p class="subtitle">Enter your credentials to access your workspaces</p>
 
