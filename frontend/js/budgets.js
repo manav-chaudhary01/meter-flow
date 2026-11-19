@@ -398,8 +398,7 @@
             closeModal("create-budget-modal");
             closeModal("edit-budget-modal");
             closeModal("deactivate-budget-modal");
-            activeEditBudget = null;
-            pendingDeactivateBudget = null;
+            pendingDeactivateBudgetId = null;
 
             // Reset alert filter
             const alertFilter = document.getElementById("filter-alert-status");
@@ -891,13 +890,14 @@
     const activeList = budgets.filter((b) => b.status === "active");
     if (activeBudgetsEl) activeBudgetsEl.textContent = activeList.length.toString();
 
-    let totalSum = 0;
+    let totalCents = 0;
     let curr = "USD";
     activeList.forEach((b) => {
       const val = parseFloat(b.amount) || 0;
-      totalSum += val;
+      totalCents += Math.round(val * 100);
       if (b.currency) curr = b.currency;
     });
+    const totalSum = totalCents / 100;
 
     if (totalBudgetEl) {
       totalBudgetEl.textContent = `${curr} ${totalSum.toLocaleString(undefined, {

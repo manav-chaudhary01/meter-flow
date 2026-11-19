@@ -151,6 +151,9 @@
     formatAuthErrorMessage(err) {
       if (!err) return "An unexpected error occurred.";
       const msg = String(err.message || "");
+      if (err.status === 400) {
+        return msg || "Invalid request. Please check your input.";
+      }
       if (err.status === 401) {
         if (msg && !msg.toLowerCase().includes("session") && !msg.toLowerCase().includes("expired")) {
           return msg;
@@ -169,6 +172,18 @@
           return "Access Denied: You do not have permission to perform this administrative action.";
         }
         return err.message || "Access Denied: You do not have permission to access this resource.";
+      }
+      if (err.status === 404) {
+        return msg || "The requested resource was not found.";
+      }
+      if (err.status === 409) {
+        return msg || "A conflict occurred with an existing resource.";
+      }
+      if (err.status === 413) {
+        return msg || "Request payload is too large. Please reduce input size.";
+      }
+      if (err.status >= 500) {
+        return msg || "A server error occurred. Please try again later.";
       }
       return err.message || "An unexpected error occurred.";
     },
@@ -254,21 +269,35 @@
       } else {
         try {
           const text = await response.text();
-          data = { message: text };
+          data = text ? { message: text } : null;
         } catch {
           data = null;
         }
       }
 
       if (!response.ok) {
-        const errorMessage = (data && data.message) ? data.message : `Request failed with status ${response.status}`;
+        let errorMessage = "";
+        if (data && typeof data === "object") {
+          if (typeof data.message === "string" && data.message.trim()) {
+            errorMessage = data.message.trim();
+          } else if (typeof data.error === "string" && data.error.trim()) {
+            errorMessage = data.error.trim();
+          } else if (Array.isArray(data.errors) && data.errors.length > 0) {
+            errorMessage = data.errors
+              .map((e) => (typeof e === "string" ? e : (e.msg || e.message || JSON.stringify(e))))
+              .join("; ");
+          }
+        }
+        if (!errorMessage) {
+          errorMessage = `Request failed with status ${response.status}`;
+        }
         const error = new Error(errorMessage);
         error.status = response.status;
         error.data = data;
         throw error;
       }
 
-      return data;
+      return data || {};
     },
 
     // HTTP Convenience Methods
@@ -288,8 +317,8 @@
       return this.request(endpoint, { method: "PATCH", body });
     },
 
-    delete(endpoint) {
-      return this.request(endpoint, { method: "DELETE" });
+    delete(endpoint, body = null) {
+      return this.request(endpoint, { method: "DELETE", body });
     }
   };
 

@@ -718,15 +718,16 @@
 
     if (countEl) countEl.textContent = totalCount.toString();
 
-    let sum = 0;
+    let sumCents = 0;
     let currency = "USD";
     records.forEach((b) => {
       if (b.status === "issued" || b.status === "finalized") {
         const val = parseFloat(b.total) || 0;
-        sum += val;
+        sumCents += Math.round(val * 100);
         if (b.currency) currency = b.currency;
       }
     });
+    const sum = sumCents / 100;
 
     if (spendEl) {
       spendEl.textContent = `${currency} ${sum.toLocaleString(undefined, {
