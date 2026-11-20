@@ -40,9 +40,9 @@ meter-flow/
 │   │   ├── middleware/          # JWT auth & role-based access control
 │   │   ├── models/              # Mongoose schemas (Tenant, User, Membership, TrackedService, UsageRecord, BillingRecord, Budget, BudgetAlert, Resource)
 │   │   ├── routes/              # Express API route modules
-│   │   ├── services/            # Pure calculation & evaluation engines (billingCalculator, spendCalculator, spendForecaster, alertEvaluator)
+│   │   ├── services/            # Pure calculation & evaluation engines (billingCalculator, spendCalculator, spendForecaster, alertEvaluator, forecasting/)
 │   │   └── utils/               # Migration & workspace backfill utilities
-│   └── tests/                   # Automated unit & integration test suite (277 tests across 77 suites)
+│   └── tests/                   # Automated unit & integration test suite (293 tests across 83 suites)
 │       ├── helpers/db.js        # In-memory test database runner
 │       ├── health.test.js       # Health check & 404 tests
 │       ├── auth.test.js         # Authentication tests
@@ -51,6 +51,7 @@ meter-flow/
 │       ├── usage.test.js        # Usage ingestion, idempotency & aggregation tests
 │       ├── billing.test.js      # Billing calculation, periods, reconciliation & idempotency tests
 │       ├── budgets.test.js      # Budget CRUD, actual spend, threshold alerts & forecasting tests
+│       ├── forecasting/         # Forecasting evaluation tests (Linear Run-Rate vs. ARIMA) (16 tests)
 │       ├── reliability.test.js  # Milestone F reliability, reconciliation & operational tests
 │       ├── e2eWorkflow.test.js  # Milestone G 15-step end-to-end integration lifecycle tests
 │       ├── frontendServing.test.js # Frontend static serving, routing & security boundary tests (21 tests)
@@ -80,6 +81,7 @@ meter-flow/
 │       └── budgets.js           # Budgets, alerts & forecast projections controller
 ├── docs/
 │   ├── API.md                   # Complete REST API specification
+│   ├── FORECASTING_EVALUATION.md # Forecasting evaluation report: Linear Run-Rate vs. ARIMA (MAPE)
 │   ├── PROJECT_DEMO.md          # Step-by-step backend demonstration guide & checklist
 │   ├── TEST_PLAN.md             # Master test plan & empirical verification report (140 tests)
 │   ├── PROJECT_REPORT_NOTES.md  # Architecture, data models & university report notes
@@ -138,7 +140,13 @@ npm run migrate:workspaces
 ```powershell
 npm test
 ```
-The test suite executes 190 automated tests across 53 test suites using Node's native test runner (`node:test`) with an isolated in-memory MongoDB instance. No external database connection is required.
+The test suite executes 293 automated tests across 83 test suites using Node's native test runner (`node:test`) with an isolated in-memory MongoDB instance. No external database connection is required.
+
+### 7. Running the Forecasting Evaluation Experiment
+```powershell
+npm run evaluate:forecast
+```
+Executes the reproducible time-series evaluation comparing Model A (Linear Run-Rate) against Model B (ARIMA) over a 90-day synthetic chronological dataset and reports MAPE, MAE, and RMSE metrics (see [docs/FORECASTING_EVALUATION.md](docs/FORECASTING_EVALUATION.md)).
 
 ---
 
@@ -215,3 +223,4 @@ The frontend is implemented as a lightweight, framework-free single-page interfa
 - [x] **Milestone Nov 18 — Security, CSP & Input Validation Audit**: Complete application-security audit across the stack. Hardened Helmet Content Security Policy (strict script/object/frame restrictions, anti-clickjacking DENY), request body size limit (500kb) and malformed JSON syntax error sanitization, parameter pollution prevention and query operator injection immunity across all list/filter endpoints, prototype pollution defense with recursive metadata validation and depth limits, path traversal immunity for static files, XSS adversarial string neutralization with 100% safe native DOM sinks, production error sanitization, and real browser verification (211 passing tests across 61 suites).
 - [x] **Milestone Nov 19 — Responsive UI, Accessibility (A11y) & UX Polish**: Cross-device responsive design across Desktop (1440px/1280px), Tablet (1024px/768px), and Mobile (430px/390px/360px) viewports; full WCAG AA accessibility compliance with keyboard skip-links, high-contrast :focus-visible outlines, accessible explicit form labels, and horizontal scroll region accessibility (tabindex="0" role="region"); accessible modal lifecycle with complete Tab focus trapping, background scroll prevention (body.modal-open), Escape-to-dismiss, and trigger button focus restoration; mobile slide-out navigation drawer with smooth animations and Escape handling; minimum 44x44px touch targets on coarse pointers; user preference prefers-reduced-motion support; comprehensive automated testing (247 passing tests across 68 suites) and live browser verification.
 - [x] **Milestone Nov 20 — API Contract, Error Handling & Frontend/Backend Integration Audit**: Exhaustive contract audit between vanilla frontend and Express backend. Verified all 23 API endpoints, status codes (200, 201, 400, 401, 403, 404, 409, 413, 500, network error), error response extraction (`data.message`, `data.error`, `data.errors`), `MeterFlowAPI.delete` payload support, safe integer cents aggregation avoiding IEEE-754 floating-point drift in client KPI summaries, budget modal target cleanup on workspace switch, dedicated contract test suite (`backend/tests/apiContracts.test.js`), full live browser verification with screenshots across all 9 checkpoints, and 277 automated tests passing across 77 suites (0 failures).
+- [x] **Forecasting Evaluation Milestone (Linear Run-Rate vs. ARIMA)**: Evaluated MeterFlow's production linear run-rate forecasting model against an ARIMA(1,1,1) time-series model on a 90-day deterministic chronological dataset (60 days training, 30 days held-out evaluation window) with upward growth trend and weekly seasonality. Demonstrated that ARIMA achieved lower MAPE (17.27% vs. 24.63%) by modeling trend differencing and serial autocorrelation, while linear run-rate offers O(1) computational speed, zero external dependencies, immediate usability from Day 2 of budget cycles, and full financial explainability. Validated reproducibility via `npm run evaluate:forecast`, added 16 automated tests (expanding project suite to 293 passing tests across 83 suites, 0 failures), verified existing forecast UI in browser, and compiled complete evaluation report in `docs/FORECASTING_EVALUATION.md`.
