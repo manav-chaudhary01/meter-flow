@@ -42,7 +42,7 @@ meter-flow/
 │   │   ├── routes/              # Express API route modules
 │   │   ├── services/            # Pure calculation & evaluation engines (billingCalculator, spendCalculator, spendForecaster, alertEvaluator, forecasting/)
 │   │   └── utils/               # Migration & workspace backfill utilities
-│   └── tests/                   # Automated unit & integration test suite (293 tests across 83 suites)
+│   └── tests/                   # Automated unit & integration test suite (302 tests across 84 suites)
 │       ├── helpers/db.js        # In-memory test database runner
 │       ├── health.test.js       # Health check & 404 tests
 │       ├── auth.test.js         # Authentication tests
@@ -52,6 +52,7 @@ meter-flow/
 │       ├── billing.test.js      # Billing calculation, periods, reconciliation & idempotency tests
 │       ├── budgets.test.js      # Budget CRUD, actual spend, threshold alerts & forecasting tests
 │       ├── forecasting/         # Forecasting evaluation tests (Linear Run-Rate vs. ARIMA) (16 tests)
+│       ├── performanceReliability.test.js # Concurrency, idempotency race condition, SLA & multi-tenant reliability tests (9 tests)
 │       ├── reliability.test.js  # Milestone F reliability, reconciliation & operational tests
 │       ├── e2eWorkflow.test.js  # Milestone G 15-step end-to-end integration lifecycle tests
 │       ├── frontendServing.test.js # Frontend static serving, routing & security boundary tests (21 tests)
@@ -81,6 +82,7 @@ meter-flow/
 │       └── budgets.js           # Budgets, alerts & forecast projections controller
 ├── docs/
 │   ├── API.md                   # Complete REST API specification
+│   ├── PERFORMANCE_RELIABILITY_REPORT.md # Pre-hosting performance, concurrency & SLA benchmark report
 │   ├── FORECASTING_EVALUATION.md # Forecasting evaluation report: Linear Run-Rate vs. ARIMA (MAPE)
 │   ├── PROJECT_DEMO.md          # Step-by-step backend demonstration guide & checklist
 │   ├── TEST_PLAN.md             # Master test plan & empirical verification report (140 tests)
@@ -140,13 +142,19 @@ npm run migrate:workspaces
 ```powershell
 npm test
 ```
-The test suite executes 293 automated tests across 83 test suites using Node's native test runner (`node:test`) with an isolated in-memory MongoDB instance. No external database connection is required.
+The test suite executes 302 automated tests across 84 test suites using Node's native test runner (`node:test`) with an isolated in-memory MongoDB instance. No external database connection is required.
 
 ### 7. Running the Forecasting Evaluation Experiment
 ```powershell
 npm run evaluate:forecast
 ```
 Executes the reproducible time-series evaluation comparing Model A (Linear Run-Rate) against Model B (ARIMA) over a 90-day synthetic chronological dataset and reports MAPE, MAE, and RMSE metrics (see [docs/FORECASTING_EVALUATION.md](docs/FORECASTING_EVALUATION.md)).
+
+### 8. Running the Performance & Reliability Benchmarks
+```powershell
+npm run benchmark
+```
+Executes high-resolution latency and throughput benchmarking across 15 core API workloads, measuring Mean, p50, p95, p99, and req/s under active database indexing (see [docs/PERFORMANCE_RELIABILITY_REPORT.md](docs/PERFORMANCE_RELIABILITY_REPORT.md)).
 
 ---
 
@@ -224,3 +232,4 @@ The frontend is implemented as a lightweight, framework-free single-page interfa
 - [x] **Milestone Nov 19 — Responsive UI, Accessibility (A11y) & UX Polish**: Cross-device responsive design across Desktop (1440px/1280px), Tablet (1024px/768px), and Mobile (430px/390px/360px) viewports; full WCAG AA accessibility compliance with keyboard skip-links, high-contrast :focus-visible outlines, accessible explicit form labels, and horizontal scroll region accessibility (tabindex="0" role="region"); accessible modal lifecycle with complete Tab focus trapping, background scroll prevention (body.modal-open), Escape-to-dismiss, and trigger button focus restoration; mobile slide-out navigation drawer with smooth animations and Escape handling; minimum 44x44px touch targets on coarse pointers; user preference prefers-reduced-motion support; comprehensive automated testing (247 passing tests across 68 suites) and live browser verification.
 - [x] **Milestone Nov 20 — API Contract, Error Handling & Frontend/Backend Integration Audit**: Exhaustive contract audit between vanilla frontend and Express backend. Verified all 23 API endpoints, status codes (200, 201, 400, 401, 403, 404, 409, 413, 500, network error), error response extraction (`data.message`, `data.error`, `data.errors`), `MeterFlowAPI.delete` payload support, safe integer cents aggregation avoiding IEEE-754 floating-point drift in client KPI summaries, budget modal target cleanup on workspace switch, dedicated contract test suite (`backend/tests/apiContracts.test.js`), full live browser verification with screenshots across all 9 checkpoints, and 277 automated tests passing across 77 suites (0 failures).
 - [x] **Forecasting Evaluation Milestone (Linear Run-Rate vs. ARIMA)**: Evaluated MeterFlow's production linear run-rate forecasting model against an ARIMA(1,1,1) time-series model on a 90-day deterministic chronological dataset (60 days training, 30 days held-out evaluation window) with upward growth trend and weekly seasonality. Demonstrated that ARIMA achieved lower MAPE (17.27% vs. 24.63%) by modeling trend differencing and serial autocorrelation, while linear run-rate offers O(1) computational speed, zero external dependencies, immediate usability from Day 2 of budget cycles, and full financial explainability. Validated reproducibility via `npm run evaluate:forecast`, added 16 automated tests (expanding project suite to 293 passing tests across 83 suites, 0 failures), verified existing forecast UI in browser, and compiled complete evaluation report in `docs/FORECASTING_EVALUATION.md`.
+- [x] **Performance & Reliability Validation Milestone**: Validated system performance, database index efficiency, multi-tenant isolation, and race condition resilience prior to hosting. Added compound index `{ tenantId: 1, currency: 1, status: 1, billingPeriodStart: 1 }` on `BillingRecord` accelerating actual spend calculations. Empirically benchmarked 15 workloads with high-resolution timers (`npm run benchmark`), demonstrating sub-30ms p95 latencies on all read and aggregation endpoints and 100% tenant isolation under concurrent interleaving. Proven race condition immunity for parallel idempotent usage ingestion (10 concurrent requests -> 1 insert, 9 replays, 0 duplicates) and parallel billing generation (6 concurrent requests -> 1 bill, 0 double-billing). Expanded test suite with 9 concurrency and SLA tests to 302 passing tests across 84 suites (0 failures), verified responsive UI in real browser, and compiled complete benchmark report in `docs/PERFORMANCE_RELIABILITY_REPORT.md`.

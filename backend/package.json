@@ -8,6 +8,7 @@
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
     "test": "node --test --test-concurrency=1",
+    "benchmark": "node scripts/runPerformanceBenchmarks.js",
     "evaluate:forecast": "node scripts/evaluateForecast.js",
     "migrate:workspaces": "node -e \"import('./src/config/database.js').then(async m => { await m.connectDatabase(); const { backfillWorkspaces } = await import('./src/utils/migrateWorkspaces.js'); const s = await backfillWorkspaces(); console.log('Migration complete:', s); process.exit(0); });\""
   },

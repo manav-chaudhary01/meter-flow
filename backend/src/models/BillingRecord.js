@@ -126,6 +126,7 @@ billingRecordSchema.index(
 
 billingRecordSchema.index({ tenantId: 1, generatedAt: -1 });
 billingRecordSchema.index({ tenantId: 1, status: 1 });
+billingRecordSchema.index({ tenantId: 1, currency: 1, status: 1, billingPeriodStart: 1 });
 
 const BillingRecord = mongoose.model("BillingRecord", billingRecordSchema);
 
