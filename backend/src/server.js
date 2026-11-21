@@ -11,8 +11,9 @@ await connectDatabase();
 // Idempotent migration: backfill legacy tenants & user memberships
 await backfillWorkspaces();
 
-const server = app.listen(env.PORT, () => {
-  console.log(`MeterFlow API running on port ${env.PORT}`);
+const HOST = process.env.HOST || "0.0.0.0";
+const server = app.listen(env.PORT, HOST, () => {
+  console.log(`MeterFlow API running on http://${HOST}:${env.PORT}`);
 });
 
 // Graceful shutdown handling

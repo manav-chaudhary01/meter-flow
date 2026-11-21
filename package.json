@@ -1,0 +1,23 @@
+{
+  "name": "meterflow",
+  "version": "1.0.0",
+  "description": "MeterFlow — Multi-Tenant SaaS Metered Billing Platform",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "npm start --prefix backend",
+    "build": "npm install --prefix backend",
+    "test": "npm test --prefix backend",
+    "benchmark": "npm run benchmark --prefix backend",
+    "evaluate:forecast": "npm run evaluate:forecast --prefix backend"
+  },
+  "keywords": [
+    "metered-billing",
+    "saas",
+    "forecasting",
+    "multi-tenant",
+    "express"
+  ],
+  "author": "",
+  "license": "ISC"
+}
