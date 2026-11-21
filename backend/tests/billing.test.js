@@ -364,7 +364,7 @@ describe("Billing Engine API", () => {
       assert.equal(bill.lineItems[0].amount, "1.17");
     });
 
-    it("should exclude usage records that fall outside the period boundaries (occurredAt < start or occurredAt >= end)", async () => {
+    it("should exclude future usage (occurredAt >= end) and already-billed usage from the bill", async () => {
       await TrackedService.deleteMany({
         _id: { $ne: meteredServiceA.id }
       });
@@ -396,7 +396,7 @@ describe("Billing Engine API", () => {
         });
       assert.equal(u2.status, 201);
 
-      // 3. Exactly on periodEnd: EXCLUDED (exclusive upper bound)
+      // 3. Exactly on periodEnd: EXCLUDED (exclusive upper bound, future usage)
       const u3 = await request(app)
         .post("/api/usage")
         .set("Authorization", `Bearer ${ownerTokenA}`)
@@ -408,17 +408,40 @@ describe("Billing Engine API", () => {
         });
       assert.equal(u3.status, 201);
 
-      // 4. Before periodStart: EXCLUDED
-      const u4 = await request(app)
-        .post("/api/usage")
-        .set("Authorization", `Bearer ${ownerTokenA}`)
-        .send({
-          serviceId: meteredServiceA.id,
-          unit: "tokens",
-          quantity: "80000",
-          occurredAt: "2026-02-28T23:59:59.000Z"
-        });
-      assert.equal(u4.status, 201);
+      // 4. Before periodStart but already billed in a prior invoice: EXCLUDED (single-billing guard)
+      const priorInvoice = await BillingRecord.create({
+        tenantId: tenantAId,
+        invoiceNumber: "INV-20260228-PRIOR",
+        billingPeriodStart: new Date("2026-02-01T00:00:00.000Z"),
+        billingPeriodEnd: new Date("2026-03-01T00:00:00.000Z"),
+        currency: "USD",
+        lineItems: [
+          {
+            serviceId: meteredServiceA.id,
+            serviceName: "Metered AI Service",
+            chargeType: "usage",
+            quantity: "80000",
+            unit: "tokens",
+            unitPrice: "0.00002",
+            amount: "1.60",
+            usageRecordCount: 1,
+            description: "February tokens"
+          }
+        ],
+        subtotal: "1.60",
+        total: "1.60",
+        status: "issued"
+      });
+
+      const u4 = await UsageRecord.create({
+        tenantId: tenantAId,
+        serviceId: meteredServiceA.id,
+        unit: "tokens",
+        quantity: "80000",
+        occurredAt: new Date("2026-02-28T23:59:59.000Z"),
+        billingRecordId: priorInvoice._id,
+        billedAt: new Date("2026-03-01T00:00:00.000Z")
+      });
 
       const res = await request(app)
         .post("/api/billing/generate")
@@ -436,12 +459,13 @@ describe("Billing Engine API", () => {
       assert.equal(bill.lineItems[0].amount, "0.60");
       assert.equal(bill.lineItems[0].usageRecordCount, 2);
 
-      // Verify excluded records remain unbilled
+      // Verify future record u3 remains unbilled
       const unbilled = await UsageRecord.find({
         serviceId: meteredServiceA.id,
         billingRecordId: null
       });
-      assert.equal(unbilled.length, 2);
+      assert.equal(unbilled.length, 1);
+      assert.equal(unbilled[0]._id.toString(), u3.body.data.record.id);
     });
 
     it("should handle empty billing periods with 0.00 total and empty lineItems", async () => {
@@ -905,6 +929,348 @@ describe("Billing Engine API", () => {
         .get(`/api/billing/${billAId}/usage`)
         .set("Authorization", `Bearer ${ownerTokenB}`);
       assert.equal(res.status, 404);
+    });
+  });
+
+  describe("Late-Arriving Usage & Arrears Catch-Up Verification", () => {
+    let serviceA;
+    let period1Start, period1End;
+    let period2Start, period2End;
+
+    beforeEach(async () => {
+      // Clean services and create dedicated metered service
+      await TrackedService.deleteMany({ tenantId: tenantAId });
+
+      serviceA = await TrackedService.create({
+        tenantId: tenantAId,
+        name: "Gateway API",
+        provider: "Internal",
+        category: "api",
+        trackingType: "metered",
+        currency: "USD",
+        unit: "requests",
+        unitPrice: "0.01",
+        status: "active"
+      });
+
+      period1Start = "2026-11-01T00:00:00.000Z";
+      period1End = "2026-12-01T00:00:00.000Z";
+      period2Start = "2026-12-01T00:00:00.000Z";
+      period2End = "2027-01-01T00:00:00.000Z";
+    });
+
+    it("TEST 1: should include late-arriving Period 1 usage in Period 2 while keeping Period 1 invoice immutable", async () => {
+      // 1. Ingest initial usage for Period 1: 100 requests @ $0.01 = $1.00
+      const u1 = await request(app)
+        .post("/api/usage")
+        .set("Authorization", `Bearer ${ownerTokenA}`)
+        .send({
+          serviceId: serviceA._id,
+          unit: "requests",
+          quantity: "100",
+          occurredAt: "2026-11-10T12:00:00.000Z"
+        });
+      assert.equal(u1.status, 201);
+      const u1Id = u1.body.data.record.id;
+
+      // 2. Generate Period 1 invoice
+      const bill1Res = await request(app)
+        .post("/api/billing/generate")
+        .set("Authorization", `Bearer ${ownerTokenA}`)
+        .send({
+          billingPeriodStart: period1Start,
+          billingPeriodEnd: period1End,
+          currency: "USD"
+        });
+      assert.equal(bill1Res.status, 201);
+      assert.equal(bill1Res.body.data.isExisting, false);
+      const bill1 = bill1Res.body.data.billingRecord;
+      assert.equal(bill1.total, "1.00");
+      assert.equal(bill1.lineItems[0].quantity, "100");
+      assert.equal(bill1.lineItems[0].amount, "1.00");
+      assert.equal(bill1.lineItems[0].usageRecordCount, 1);
+
+      // Verify u1 is reconciled to bill1
+      const u1Doc = await UsageRecord.findById(u1Id);
+      assert.equal(u1Doc.billingRecordId.toString(), bill1.id);
+
+      // 3. Late usage arrives: 5,000 requests @ $0.01 = $50.00, with occurredAt in Period 1
+      const uLate = await request(app)
+        .post("/api/usage")
+        .set("Authorization", `Bearer ${ownerTokenA}`)
+        .send({
+          serviceId: serviceA._id,
+          unit: "requests",
+          quantity: "5000",
+          occurredAt: "2026-11-20T15:30:00.000Z",
+          idempotencyKey: "late-hosted-alert-001"
+        });
+      assert.equal(uLate.status, 201);
+      const uLateId = uLate.body.data.record.id;
+
+      // Also ingest regular Period 2 usage: 200 requests @ $0.01 = $2.00
+      const u2 = await request(app)
+        .post("/api/usage")
+        .set("Authorization", `Bearer ${ownerTokenA}`)
+        .send({
+          serviceId: serviceA._id,
+          unit: "requests",
+          quantity: "200",
+          occurredAt: "2026-12-10T12:00:00.000Z"
+        });
+      assert.equal(u2.status, 201);
+
+      // 4. Generate Period 2 invoice
+      const bill2Res = await request(app)
+        .post("/api/billing/generate")
+        .set("Authorization", `Bearer ${ownerTokenA}`)
+        .send({
+          billingPeriodStart: period2Start,
+          billingPeriodEnd: period2End,
+          currency: "USD"
+        });
+      assert.equal(bill2Res.status, 201);
+      assert.equal(bill2Res.body.data.isExisting, false);
+      const bill2 = bill2Res.body.data.billingRecord;
+
+      // Assert Period 2 includes both late usage (5000) and regular Period 2 usage (200) = 5200 requests = $52.00
+      assert.equal(bill2.lineItems[0].quantity, "5200");
+      assert.equal(bill2.lineItems[0].amount, "52.00");
+      assert.equal(bill2.lineItems[0].usageRecordCount, 2);
+      assert.equal(bill2.total, "52.00");
+
+      // Assert late usage record is reconciled to Period 2
+      const uLateDoc = await UsageRecord.findById(uLateId);
+      assert.equal(uLateDoc.billingRecordId.toString(), bill2.id);
+      assert.ok(uLateDoc.billedAt);
+
+      // Assert Period 1 invoice total/line items remain strictly unchanged and immutable
+      const bill1Verify = await BillingRecord.findById(bill1.id);
+      assert.equal(bill1Verify.total.toString(), "1.00");
+      assert.equal(bill1Verify.lineItems[0].quantity.toString(), "100");
+      assert.equal(bill1Verify.lineItems[0].amount.toString(), "1.00");
+      assert.equal(bill1Verify.lineItems[0].usageRecordIds.length, 1);
+      assert.equal(bill1Verify.lineItems[0].usageRecordIds[0].toString(), u1Id);
+
+      // Assert neither record is billed twice
+      const allTenantBilledUsage = await UsageRecord.find({
+        tenantId: tenantAId,
+        billingRecordId: { $ne: null }
+      });
+      assert.equal(allTenantBilledUsage.length, 3); // u1, uLate, u2
+      const unbilled = await UsageRecord.find({ tenantId: tenantAId, billingRecordId: null });
+      assert.equal(unbilled.length, 0);
+    });
+
+    it("TEST 2: should return HTTP 200 and isExisting=true on Period 1 re-generation without attaching late usage", async () => {
+      // 1. Initial Period 1 usage: 100 requests
+      await request(app)
+        .post("/api/usage")
+        .set("Authorization", `Bearer ${ownerTokenA}`)
+        .send({
+          serviceId: serviceA._id,
+          unit: "requests",
+          quantity: "100",
+          occurredAt: "2026-11-10T12:00:00.000Z"
+        });
+
+      // Generate Period 1
+      const gen1 = await request(app)
+        .post("/api/billing/generate")
+        .set("Authorization", `Bearer ${ownerTokenA}`)
+        .send({
+          billingPeriodStart: period1Start,
+          billingPeriodEnd: period1End,
+          currency: "USD"
+        });
+      assert.equal(gen1.status, 201);
+      const bill1Id = gen1.body.data.billingRecord.id;
+
+      // 2. Late usage arrives for Period 1
+      const lateRes = await request(app)
+        .post("/api/usage")
+        .set("Authorization", `Bearer ${ownerTokenA}`)
+        .send({
+          serviceId: serviceA._id,
+          unit: "requests",
+          quantity: "5000",
+          occurredAt: "2026-11-20T12:00:00.000Z"
+        });
+      const lateId = lateRes.body.data.record.id;
+
+      // 3. Re-call generate for Period 1
+      const regenRes = await request(app)
+        .post("/api/billing/generate")
+        .set("Authorization", `Bearer ${ownerTokenA}`)
+        .send({
+          billingPeriodStart: period1Start,
+          billingPeriodEnd: period1End,
+          currency: "USD"
+        });
+
+      // Assert HTTP 200, isExisting=true, unchanged bill
+      assert.equal(regenRes.status, 200);
+      assert.equal(regenRes.body.data.isExisting, true);
+      assert.equal(regenRes.body.data.billingRecord.id, bill1Id);
+      assert.equal(regenRes.body.data.billingRecord.total, "1.00");
+      assert.equal(regenRes.body.data.billingRecord.lineItems[0].quantity, "100");
+
+      // Assert late usage is NOT attached to Period 1 and remains unbilled
+      const lateDoc = await UsageRecord.findById(lateId);
+      assert.equal(lateDoc.billingRecordId, null);
+      assert.equal(lateDoc.billedAt, null);
+    });
+
+    it("TEST 3: should strictly exclude future usage at or after Period 2 endDate", async () => {
+      // Ingest usage occurring exactly on period2End (future)
+      const uFuture1 = await request(app)
+        .post("/api/usage")
+        .set("Authorization", `Bearer ${ownerTokenA}`)
+        .send({
+          serviceId: serviceA._id,
+          unit: "requests",
+          quantity: "999",
+          occurredAt: "2027-01-01T00:00:00.000Z"
+        });
+      assert.equal(uFuture1.status, 201);
+
+      // Ingest usage occurring after period2End (future)
+      const uFuture2 = await request(app)
+        .post("/api/usage")
+        .set("Authorization", `Bearer ${ownerTokenA}`)
+        .send({
+          serviceId: serviceA._id,
+          unit: "requests",
+          quantity: "888",
+          occurredAt: "2027-01-05T00:00:00.000Z"
+        });
+      assert.equal(uFuture2.status, 201);
+
+      // Ingest valid usage within Period 2 window
+      const uValid = await request(app)
+        .post("/api/usage")
+        .set("Authorization", `Bearer ${ownerTokenA}`)
+        .send({
+          serviceId: serviceA._id,
+          unit: "requests",
+          quantity: "50",
+          occurredAt: "2026-12-15T12:00:00.000Z"
+        });
+      assert.equal(uValid.status, 201);
+
+      const res = await request(app)
+        .post("/api/billing/generate")
+        .set("Authorization", `Bearer ${ownerTokenA}`)
+        .send({
+          billingPeriodStart: period2Start,
+          billingPeriodEnd: period2End,
+          currency: "USD"
+        });
+
+      assert.equal(res.status, 201);
+      const bill = res.body.data.billingRecord;
+      assert.equal(bill.lineItems[0].quantity, "50");
+      assert.equal(bill.lineItems[0].amount, "0.50");
+
+      // Assert future records remain unbilled
+      const unbilled = await UsageRecord.find({
+        tenantId: tenantAId,
+        billingRecordId: null
+      });
+      assert.equal(unbilled.length, 2);
+    });
+
+    it("TEST 6: should ensure arrears catch-up respects tenant isolation (cannot bill Tenant B usage)", async () => {
+      // Ingest unbilled late usage in Tenant B
+      const svcBeta = await TrackedService.create({
+        tenantId: tenantBId,
+        name: "Beta API",
+        trackingType: "metered",
+        currency: "USD",
+        unit: "requests",
+        unitPrice: "0.05",
+        status: "active"
+      });
+
+      const uBeta = await request(app)
+        .post("/api/usage")
+        .set("Authorization", `Bearer ${ownerTokenB}`)
+        .send({
+          serviceId: svcBeta._id,
+          unit: "requests",
+          quantity: "10000",
+          occurredAt: "2026-10-15T12:00:00.000Z" // Old date
+        });
+      assert.equal(uBeta.status, 201);
+
+      // Generate bill for Tenant A
+      const resA = await request(app)
+        .post("/api/billing/generate")
+        .set("Authorization", `Bearer ${ownerTokenA}`)
+        .send({
+          billingPeriodStart: period1Start,
+          billingPeriodEnd: period1End,
+          currency: "USD"
+        });
+      assert.equal(resA.status, 201);
+      // Tenant A bill should have 0 usage line items
+      assert.equal(resA.body.data.billingRecord.lineItems.length, 0);
+
+      // Tenant B usage must still be unbilled
+      const betaDoc = await UsageRecord.findById(uBeta.body.data.record.id);
+      assert.equal(betaDoc.billingRecordId, null);
+    });
+
+    it("TEST 7: should preserve currency isolation during arrears catch-up", async () => {
+      // Ingest unbilled EUR usage
+      const eurSvc = await TrackedService.create({
+        tenantId: tenantAId,
+        name: "EUR API",
+        trackingType: "metered",
+        currency: "EUR",
+        unit: "requests",
+        unitPrice: "0.02",
+        status: "active"
+      });
+
+      const uEur = await request(app)
+        .post("/api/usage")
+        .set("Authorization", `Bearer ${ownerTokenA}`)
+        .send({
+          serviceId: eurSvc._id,
+          unit: "requests",
+          quantity: "400",
+          occurredAt: "2026-10-20T12:00:00.000Z"
+        });
+      assert.equal(uEur.status, 201);
+
+      // Ingest USD usage
+      await request(app)
+        .post("/api/usage")
+        .set("Authorization", `Bearer ${ownerTokenA}`)
+        .send({
+          serviceId: serviceA._id,
+          unit: "requests",
+          quantity: "300",
+          occurredAt: "2026-10-25T12:00:00.000Z"
+        });
+
+      // Generate USD bill
+      const resUSD = await request(app)
+        .post("/api/billing/generate")
+        .set("Authorization", `Bearer ${ownerTokenA}`)
+        .send({
+          billingPeriodStart: period1Start,
+          billingPeriodEnd: period1End,
+          currency: "USD"
+        });
+      assert.equal(resUSD.status, 201);
+      assert.equal(resUSD.body.data.billingRecord.currency, "USD");
+      assert.equal(resUSD.body.data.billingRecord.lineItems[0].quantity, "300");
+
+      // EUR usage should remain unbilled
+      const eurDoc = await UsageRecord.findById(uEur.body.data.record.id);
+      assert.equal(eurDoc.billingRecordId, null);
     });
   });
 });

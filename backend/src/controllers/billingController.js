@@ -164,12 +164,15 @@ export async function generateBill(req, res) {
       currency: normalizedCurrency
     });
 
-    // 4. Query all unbilled usage events in the period
+    // 4. Query all unbilled usage events up to the end of the billing period
+    // Arrears Catch-Up: Include all eligible unbilled usage records where occurredAt < endDate.
+    // This allows late-arriving usage from prior closed billing periods to be caught up in the current bill,
+    // while billingRecordId: null guarantees single-billing (never billing the same event twice),
+    // and occurredAt < endDate guarantees future usage at or after the period end is strictly excluded.
     const usageRecords = await UsageRecord.find({
       tenantId: req.user.tenantId,
       billingRecordId: null,
       occurredAt: {
-        $gte: startDate,
         $lt: endDate
       }
     });
