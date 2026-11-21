@@ -266,6 +266,14 @@
     setupEditBudgetForm();
     setupDeactivateModal();
 
+    if (auth && typeof auth.setWorkspaceCreatedCallback === "function") {
+      auth.setWorkspaceCreatedCallback(async () => {
+        await loadWorkspaces();
+        await loadBudgets();
+        await loadAlerts();
+      });
+    }
+
     await loadWorkspaces();
     await loadBudgets();
     await loadAlerts();

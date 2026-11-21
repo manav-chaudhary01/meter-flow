@@ -145,6 +145,9 @@ app.get("/billing", (req, res) => {
 app.get("/budgets", (req, res) => {
   res.sendFile(path.join(frontendDir, "budgets.html"));
 });
+app.get("/team", (req, res) => {
+  res.sendFile(path.join(frontendDir, "team.html"));
+});
 
 // 404 handler for undefined non-API endpoints
 app.use((req, res) => {

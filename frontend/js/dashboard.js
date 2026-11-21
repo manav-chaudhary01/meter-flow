@@ -161,6 +161,14 @@
     setupNavigation();
     setupMobileMenu();
 
+    if (auth && typeof auth.setWorkspaceCreatedCallback === "function") {
+      auth.setWorkspaceCreatedCallback(async () => {
+        await loadWorkspaces();
+        clearDashboardContainers();
+        await loadDashboardData(true);
+      });
+    }
+
     await loadWorkspaces();
     await loadDashboardData();
 

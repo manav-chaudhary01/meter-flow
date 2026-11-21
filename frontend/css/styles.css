@@ -950,6 +950,30 @@ textarea:focus-visible,
 }
 
 /* ==========================================================================
+   Team & Member Management
+   ========================================================================== */
+.team-member-cell {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.team-member-details {
+  display: flex;
+  flex-direction: column;
+}
+
+.team-member-name {
+  font-weight: 600;
+  color: var(--color-text-main);
+}
+
+.team-member-email {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+/* ==========================================================================
    Responsive Adaptations
    ========================================================================== */
 @media (max-width: 992px) {

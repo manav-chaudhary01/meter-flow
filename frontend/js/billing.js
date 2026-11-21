@@ -186,6 +186,13 @@
     setupGenerateForm();
     setupPagination();
 
+    if (auth && typeof auth.setWorkspaceCreatedCallback === "function") {
+      auth.setWorkspaceCreatedCallback(async () => {
+        await loadWorkspaces();
+        await loadBillingRecords(1);
+      });
+    }
+
     await loadWorkspaces();
     await loadBillingRecords(1);
 

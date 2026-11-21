@@ -735,8 +735,98 @@ describe("Frontend Static Serving & Security Boundaries", () => {
     assert.equal(helpers.formatDateOnly(""), "--");
   });
 
+  it("GET /team should serve team.html with 200 OK and expected DOM anchors", async () => {
+    const res = await request(app).get("/team");
+    assert.equal(res.status, 200);
+    assert.match(res.headers["content-type"], /text\/html/);
+    assert.match(res.text, /Team &amp; Members — MeterFlow/);
+    assert.match(res.text, /id="team-table"/);
+    assert.match(res.text, /id="open-invite-modal-btn"/);
+    assert.match(res.text, /id="invite-member-modal"/);
+    assert.match(res.text, /id="remove-member-modal"/);
+    assert.match(res.text, /id="create-workspace-modal"/);
+    assert.match(res.text, /id="open-create-workspace-btn"/);
+    assert.match(res.text, /id="personal-workspace-banner"/);
+  });
+
+  it("GET /js/team.js should serve the team controller with safe DOM & valid pure helpers", async () => {
+    const res = await request(app).get("/js/team.js");
+    assert.equal(res.status, 200);
+    assert.match(res.headers["content-type"], /javascript/);
+    assert.doesNotMatch(res.text, /\.innerHTML\s*=/);
+    assert.doesNotMatch(res.text, /\.outerHTML\s*=/);
+    assert.doesNotMatch(res.text, /\bwindow\.alert\s*\(/);
+    assert.doesNotMatch(res.text, /\balert\s*\(/);
+    assert.doesNotMatch(res.text, /\bwindow\.confirm\s*\(/);
+    assert.doesNotMatch(res.text, /\bconfirm\s*\(/);
+
+    // Run in isolated VM to verify pure validation and RBAC helpers
+    const sandbox = {
+      window: {},
+      document: {
+        getElementById: () => null,
+        addEventListener: () => {},
+        querySelectorAll: () => []
+      }
+    };
+    vm.runInNewContext(res.text, sandbox);
+    const helpers = sandbox.window.MeterFlowTeam;
+    assert.ok(helpers, "MeterFlowTeam should be exposed on window");
+
+    // 1. validateWorkspaceForm
+    assert.equal(helpers.validateWorkspaceForm({ name: "", type: "organization" }).valid, false);
+    assert.match(helpers.validateWorkspaceForm({ name: "", type: "organization" }).error, /name is required/i);
+    assert.equal(helpers.validateWorkspaceForm({ name: "A", type: "organization" }).valid, false);
+    assert.match(helpers.validateWorkspaceForm({ name: "A", type: "organization" }).error, /between 2 and 100/i);
+    assert.equal(helpers.validateWorkspaceForm({ name: "Valid Team", type: "invalid_type" }).valid, false);
+    assert.match(helpers.validateWorkspaceForm({ name: "Valid Team", type: "invalid_type" }).error, /personal.*organization/i);
+    assert.equal(helpers.validateWorkspaceForm({ name: "Valid Org", type: "organization" }).valid, true);
+    assert.equal(helpers.validateWorkspaceForm({ name: "Valid Personal", type: "personal" }).valid, true);
+
+    // 2. validateInviteMemberForm
+    assert.equal(helpers.validateInviteMemberForm({ email: "", role: "member" }).valid, false);
+    assert.match(helpers.validateInviteMemberForm({ email: "", role: "member" }).error, /email is required/i);
+    assert.equal(helpers.validateInviteMemberForm({ email: "invalid-email", role: "member" }).valid, false);
+    assert.match(helpers.validateInviteMemberForm({ email: "invalid-email", role: "member" }).error, /valid email/i);
+    assert.equal(helpers.validateInviteMemberForm({ email: "user@example.com", role: "superadmin" }).valid, false);
+    assert.match(helpers.validateInviteMemberForm({ email: "user@example.com", role: "superadmin" }).error, /admin.*member/i);
+    assert.equal(helpers.validateInviteMemberForm({ email: "user@example.com", role: "admin" }).valid, true);
+    assert.equal(helpers.validateInviteMemberForm({ email: "user@example.com", role: "member" }).valid, true);
+
+    // 3. canManageTeam
+    assert.equal(helpers.canManageTeam("owner"), true);
+    assert.equal(helpers.canManageTeam("admin"), true);
+    assert.equal(helpers.canManageTeam("member"), false);
+    assert.equal(helpers.canManageTeam("viewer"), false);
+
+    // 4. canRemoveMember (currentUserRole, targetMemberRole, isWorkspaceOwner)
+    assert.equal(helpers.canRemoveMember("owner", "admin", false), true);
+    assert.equal(helpers.canRemoveMember("owner", "member", false), true);
+    assert.equal(helpers.canRemoveMember("owner", "owner", true), false);
+    assert.equal(helpers.canRemoveMember("admin", "member", false), true);
+    assert.equal(helpers.canRemoveMember("admin", "admin", false), false);
+    assert.equal(helpers.canRemoveMember("admin", "owner", true), false);
+    assert.equal(helpers.canRemoveMember("member", "member", false), false);
+    assert.equal(helpers.canRemoveMember("member", "admin", false), false);
+
+    // 5. formatMemberRole
+    assert.equal(helpers.formatMemberRole("owner").label, "Owner");
+    assert.match(helpers.formatMemberRole("owner").className, /badge-primary/);
+    assert.equal(helpers.formatMemberRole("admin").label, "Admin");
+    assert.match(helpers.formatMemberRole("admin").className, /badge-info/);
+    assert.equal(helpers.formatMemberRole("member").label, "Member");
+    assert.match(helpers.formatMemberRole("member").className, /badge-neutral/);
+
+    // 6. getInitials & formatDate
+    assert.equal(helpers.getInitials("Alice Smith"), "AS");
+    assert.equal(helpers.getInitials("Bob"), "B");
+    assert.equal(helpers.getInitials(""), "U");
+    assert.equal(helpers.formatDate(null), "—");
+    assert.equal(helpers.formatDate("invalid-date"), "—");
+  });
+
   it("GET new JavaScript controller modules should return application/javascript", async () => {
-    const jsFiles = ["services.js", "usage.js", "billing.js", "budgets.js"];
+    const jsFiles = ["services.js", "usage.js", "billing.js", "budgets.js", "team.js"];
     for (const file of jsFiles) {
       const res = await request(app).get(`/js/${file}`);
       assert.equal(res.status, 200, `Failed for /js/${file}`);
@@ -745,7 +835,7 @@ describe("Frontend Static Serving & Security Boundaries", () => {
   });
 
   it("all frontend HTML pages should comply with Helmet CSP (no inline scripts or onclick)", async () => {
-    const pages = ["/", "/login", "/register", "/services", "/usage", "/billing", "/budgets"];
+    const pages = ["/", "/login", "/register", "/services", "/usage", "/billing", "/budgets", "/team"];
     for (const page of pages) {
       const res = await request(app).get(page);
       assert.equal(res.status, 200);
@@ -776,7 +866,7 @@ describe("Frontend Static Serving & Security Boundaries", () => {
   });
 
   it("all frontend JS modules should have zero unsafe innerHTML, outerHTML, window.alert, or window.confirm", async () => {
-    const modules = ["api.js", "auth.js", "dashboard.js", "services.js", "usage.js", "billing.js", "budgets.js"];
+    const modules = ["api.js", "auth.js", "dashboard.js", "services.js", "usage.js", "billing.js", "budgets.js", "team.js"];
     for (const mod of modules) {
       const res = await request(app).get(`/js/${mod}`);
       assert.equal(res.status, 200, `Failed fetching /js/${mod}`);
@@ -790,12 +880,14 @@ describe("Frontend Static Serving & Security Boundaries", () => {
   });
 
   it("all authenticated HTML pages should include consistent header, user profile, and workspace switching elements", async () => {
-    const pages = ["/", "/services", "/usage", "/billing", "/budgets"];
+    const pages = ["/", "/services", "/usage", "/billing", "/budgets", "/team"];
     for (const page of pages) {
       const res = await request(app).get(page);
       assert.equal(res.status, 200, `Failed fetching ${page}`);
       assert.match(res.text, /id="workspace-select"/, `workspace-select missing in ${page}`);
       assert.match(res.text, /id="workspace-role-badge"/, `workspace-role-badge missing in ${page}`);
+      assert.match(res.text, /id="open-create-workspace-btn"/, `open-create-workspace-btn missing in ${page}`);
+      assert.match(res.text, /id="create-workspace-modal"/, `create-workspace-modal missing in ${page}`);
       assert.match(res.text, /id="header-user-name"/, `header-user-name missing in ${page}`);
       assert.match(res.text, /id="header-user-role"/, `header-user-role missing in ${page}`);
       assert.match(res.text, /id="logout-btn"/, `logout-btn missing in ${page}`);

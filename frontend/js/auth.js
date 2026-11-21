@@ -44,9 +44,168 @@
     return { valid: true, error: null };
   }
 
+  function validateWorkspaceForm(formData) {
+    const name = (formData?.name || "").trim();
+    const type = (formData?.type || "organization").trim().toLowerCase();
+
+    if (!name) {
+      return { valid: false, error: "Workspace name is required.", fieldId: "create-workspace-name" };
+    }
+    if (name.length < 2 || name.length > 100) {
+      return {
+        valid: false,
+        error: "Workspace name must be between 2 and 100 characters.",
+        fieldId: "create-workspace-name"
+      };
+    }
+    if (!["personal", "organization"].includes(type)) {
+      return {
+        valid: false,
+        error: "Workspace type must be either 'personal' or 'organization'.",
+        fieldId: "create-workspace-type"
+      };
+    }
+    return { valid: true, error: null, data: { name, type } };
+  }
+
+  let workspaceCreatedCallback = null;
+
+  function setWorkspaceCreatedCallback(cb) {
+    workspaceCreatedCallback = cb;
+  }
+
+  function setupCreateWorkspaceModal(customCallback) {
+    if (customCallback) {
+      workspaceCreatedCallback = customCallback;
+    }
+
+    const modal = document.getElementById("create-workspace-modal");
+    const openBtn = document.getElementById("open-create-workspace-btn");
+    const form = document.getElementById("create-workspace-form");
+    const submitBtn = document.getElementById("create-workspace-submit-btn");
+    const errorEl = document.getElementById("create-workspace-error");
+    const nameInput = document.getElementById("create-workspace-name");
+    const typeSelect = document.getElementById("create-workspace-type");
+
+    if (!modal || !openBtn || !form) return;
+
+    function openModal() {
+      if (errorEl) {
+        errorEl.textContent = "";
+        errorEl.style.display = "none";
+      }
+      form.reset();
+      if (typeSelect) typeSelect.value = "organization";
+      modal.classList.add("open");
+      modal.setAttribute("aria-hidden", "false");
+      if (nameInput) {
+        setTimeout(() => nameInput.focus(), 50);
+      }
+    }
+
+    function closeModal() {
+      modal.classList.remove("open");
+      modal.setAttribute("aria-hidden", "true");
+      if (openBtn) openBtn.focus();
+    }
+
+    if (!openBtn.dataset.hasWorkspaceListener) {
+      openBtn.dataset.hasWorkspaceListener = "true";
+      openBtn.addEventListener("click", openModal);
+    }
+
+    modal.querySelectorAll("[data-close-modal='create-workspace-modal']").forEach((btn) => {
+      if (!btn.dataset.hasCloseListener) {
+        btn.dataset.hasCloseListener = "true";
+        btn.addEventListener("click", closeModal);
+      }
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && modal.classList.contains("open")) {
+        closeModal();
+      }
+    });
+
+    if (!form.dataset.hasSubmitListener) {
+      form.dataset.hasSubmitListener = "true";
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        if (errorEl) {
+          errorEl.textContent = "";
+          errorEl.style.display = "none";
+        }
+
+        const name = nameInput ? nameInput.value.trim() : "";
+        const type = typeSelect ? typeSelect.value : "organization";
+
+        const validation = validateWorkspaceForm({ name, type });
+        if (!validation.valid) {
+          if (errorEl) {
+            errorEl.textContent = validation.error;
+            errorEl.style.display = "flex";
+          }
+          return;
+        }
+
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.textContent = "";
+          const spinner = document.createElement("span");
+          spinner.className = "btn-spinner";
+          submitBtn.appendChild(spinner);
+          submitBtn.appendChild(document.createTextNode(" Creating..."));
+        }
+
+        try {
+          const apiClient = window.MeterFlowAPI || api;
+          const res = await apiClient.post("/api/workspaces", { name, type });
+          if (!res.success || !res.data || !res.data.workspace) {
+            throw new Error(res.message || "Failed to create workspace");
+          }
+
+          const createdWorkspace = res.data.workspace;
+
+          // Automatically switch to the newly created workspace
+          const switchRes = await apiClient.post("/api/workspaces/switch", {
+            workspaceId: createdWorkspace.id
+          });
+
+          if (!switchRes.success || !switchRes.data) {
+            throw new Error(switchRes.message || "Created workspace but failed to switch context");
+          }
+
+          apiClient.setToken(switchRes.data.token);
+          apiClient.setTenant(switchRes.data.workspace);
+
+          closeModal();
+
+          if (typeof workspaceCreatedCallback === "function") {
+            await workspaceCreatedCallback(switchRes.data.workspace);
+          } else {
+            window.location.reload();
+          }
+        } catch (err) {
+          if (errorEl) {
+            errorEl.textContent = err.message || "Failed to create workspace";
+            errorEl.style.display = "flex";
+          }
+        } finally {
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = "Create Workspace";
+          }
+        }
+      });
+    }
+  }
+
   const auth = {
     validateLoginForm,
     validateRegisterForm,
+    validateWorkspaceForm,
+    setWorkspaceCreatedCallback,
+    setupCreateWorkspaceModal,
 
     // Check authentication for protected pages
     requireAuth() {
@@ -279,6 +438,9 @@
       auth.initLoginPage();
     } else if (document.getElementById("register-form")) {
       auth.initRegisterPage();
+    }
+    if (document.getElementById("create-workspace-modal")) {
+      auth.setupCreateWorkspaceModal();
     }
   });
 })(window);

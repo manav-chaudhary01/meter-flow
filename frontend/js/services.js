@@ -213,6 +213,13 @@
     setupEditForm();
     setupArchiveModal();
 
+    if (auth && typeof auth.setWorkspaceCreatedCallback === "function") {
+      auth.setWorkspaceCreatedCallback(async () => {
+        await loadWorkspaces();
+        await loadServices();
+      });
+    }
+
     await loadWorkspaces();
     await loadServices();
 
