@@ -148,6 +148,12 @@
     return normalized !== "owner";
   }
 
+  function canArchiveWorkspace(role) {
+    if (!role || typeof role !== "string") return false;
+    const normalized = role.trim().toLowerCase();
+    return normalized === "owner";
+  }
+
   function getInitials(name) {
     if (!name || typeof name !== "string") return "U";
     return name
@@ -327,6 +333,15 @@
         leaveBtn.style.display = "inline-flex";
       } else {
         leaveBtn.style.display = "none";
+      }
+    }
+
+    const archiveBtn = document.getElementById("open-archive-workspace-btn");
+    if (archiveBtn) {
+      if (canArchiveWorkspace(role)) {
+        archiveBtn.style.display = "inline-flex";
+      } else {
+        archiveBtn.style.display = "none";
       }
     }
 
@@ -947,7 +962,87 @@
       });
     }
 
-    // 6. Refresh Team Button
+    // 6. Archive Workspace Modal
+    const openArchiveBtn = document.getElementById("open-archive-workspace-btn");
+    const archiveConfirmBtn = document.getElementById("archive-workspace-confirm-btn");
+    const archiveError = document.getElementById("archive-workspace-error");
+
+    if (openArchiveBtn && !openArchiveBtn.dataset.hasOpenListener) {
+      openArchiveBtn.dataset.hasOpenListener = "true";
+      openArchiveBtn.addEventListener("click", () => {
+        if (archiveError) {
+          archiveError.textContent = "";
+          archiveError.style.display = "none";
+        }
+        openModal("archive-workspace-modal", archiveConfirmBtn);
+      });
+    }
+
+    if (archiveConfirmBtn && !archiveConfirmBtn.dataset.hasConfirmListener) {
+      archiveConfirmBtn.dataset.hasConfirmListener = "true";
+      archiveConfirmBtn.addEventListener("click", async () => {
+        if (archiveConfirmBtn.disabled || !currentWorkspaceId) return;
+
+        if (archiveError) {
+          archiveError.textContent = "";
+          archiveError.style.display = "none";
+        }
+
+        archiveConfirmBtn.disabled = true;
+        archiveConfirmBtn.textContent = "";
+        const spinner = document.createElement("span");
+        spinner.className = "btn-spinner";
+        archiveConfirmBtn.appendChild(spinner);
+        archiveConfirmBtn.appendChild(document.createTextNode(" Archiving..."));
+
+        try {
+          const apiClient = window.MeterFlowAPI || api;
+          const res = await apiClient.patch(`/api/workspaces/${currentWorkspaceId}/archive`);
+
+          if (!res.success) {
+            throw new Error(res.message || "Failed to archive workspace");
+          }
+
+          if (res.data) {
+            if (res.data.token) {
+              apiClient.setToken(res.data.token);
+            }
+            if (res.data.activeWorkspace) {
+              apiClient.setTenant(res.data.activeWorkspace);
+              const user = apiClient.getUser();
+              if (user) {
+                user.tenantId = res.data.activeWorkspace.id;
+                apiClient.setUser(user);
+              }
+              currentWorkspaceId = res.data.activeWorkspace.id;
+              currentWorkspaceRole = res.data.activeWorkspace.role || "member";
+              currentWorkspaceType = res.data.activeWorkspace.type || "organization";
+            }
+          }
+
+          closeModal("archive-workspace-modal");
+          showPageSuccessBanner("Workspace has been successfully archived.");
+
+          // Reset table and reload workspaces & members
+          const tbody = document.getElementById("team-table-body");
+          clearElement(tbody);
+          membersList = [];
+
+          await loadWorkspaces();
+          await loadMembers();
+        } catch (err) {
+          if (archiveError) {
+            archiveError.textContent = err.message || "Failed to archive workspace";
+            archiveError.style.display = "block";
+          }
+        } finally {
+          archiveConfirmBtn.disabled = false;
+          archiveConfirmBtn.textContent = "Archive Workspace";
+        }
+      });
+    }
+
+    // 7. Refresh Team Button
     const refreshBtn = document.getElementById("refresh-team-btn");
     if (refreshBtn && !refreshBtn.dataset.hasRefreshListener) {
       refreshBtn.dataset.hasRefreshListener = "true";
@@ -992,6 +1087,7 @@
     canModifyMemberStatus,
     canRemoveMember,
     canLeaveWorkspace,
+    canArchiveWorkspace,
     formatMemberRole,
     formatMemberStatus,
     getInitials,

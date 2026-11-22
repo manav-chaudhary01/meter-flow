@@ -12,7 +12,7 @@ export async function listWorkspaces(req, res) {
     }).populate("tenantId");
 
     const workspaces = memberships
-      .filter((m) => m.tenantId)
+      .filter((m) => m.tenantId && m.tenantId.status !== "archived")
       .map((m) => ({
         id: m.tenantId._id,
         name: m.tenantId.name,
@@ -157,6 +157,13 @@ export async function switchWorkspace(req, res) {
       });
     }
 
+    if (targetWorkspace.status === "archived") {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied: workspace is archived and cannot be activated"
+      });
+    }
+
     // Update user's active tenant pointer
     await User.findByIdAndUpdate(req.user.userId, {
       tenantId: workspaceId
@@ -249,6 +256,13 @@ export async function renameWorkspace(req, res) {
       return res.status(404).json({
         success: false,
         message: "Workspace not found"
+      });
+    }
+
+    if (workspace.status === "archived") {
+      return res.status(403).json({
+        success: false,
+        message: "Archived workspace cannot be renamed"
       });
     }
 
@@ -379,6 +393,13 @@ export async function addWorkspaceMember(req, res) {
       return res.status(404).json({
         success: false,
         message: "Workspace not found"
+      });
+    }
+
+    if (workspace.status === "archived") {
+      return res.status(403).json({
+        success: false,
+        message: "Cannot add members to an archived workspace"
       });
     }
 
@@ -824,7 +845,7 @@ export async function leaveWorkspace(req, res) {
 
       for (const m of otherMemberships) {
         const tenant = await Tenant.findById(m.tenantId);
-        if (tenant) {
+        if (tenant && tenant.status !== "archived") {
           fallbackMembership = m;
           fallbackTenant = tenant;
           break;
@@ -908,6 +929,189 @@ export async function leaveWorkspace(req, res) {
     return res.status(500).json({
       success: false,
       message: "Failed to leave workspace"
+    });
+  }
+}
+
+export async function archiveWorkspace(req, res) {
+  try {
+    const { id: workspaceId } = req.params;
+
+    if (!workspaceId || !mongoose.Types.ObjectId.isValid(workspaceId)) {
+      return res.status(400).json({
+        success: false,
+        message: "A valid workspace ID is required"
+      });
+    }
+
+    const userId = req.user.userId;
+
+    return await withUserLock(userId, async () => {
+      // 1. Caller must be an active member with role 'owner' in this workspace
+      const callerMembership = await Membership.findOne({
+        userId,
+        tenantId: workspaceId
+      });
+
+      if (!callerMembership) {
+        return res.status(403).json({
+          success: false,
+          message: "Access denied: you are not a member of this workspace"
+        });
+      }
+
+      if (callerMembership.status !== "active") {
+        return res.status(403).json({
+          success: false,
+          message: "Access denied: your workspace membership is suspended or inactive"
+        });
+      }
+
+      if (callerMembership.role !== "owner") {
+        return res.status(403).json({
+          success: false,
+          message: "Forbidden: only the workspace owner can archive this workspace"
+        });
+      }
+
+      const workspace = await Tenant.findById(workspaceId);
+      if (!workspace) {
+        return res.status(404).json({
+          success: false,
+          message: "Workspace not found"
+        });
+      }
+
+      // Idempotency: If already archived, return deterministic 200 without altering state
+      if (workspace.status === "archived") {
+        return res.status(200).json({
+          success: true,
+          message: "Workspace is already archived",
+          data: {
+            workspace: {
+              id: workspace._id,
+              name: workspace.name,
+              status: "archived",
+              archivedAt: workspace.archivedAt
+            },
+            alreadyArchived: true
+          }
+        });
+      }
+
+      // 2. Last-active-workspace invariant: Owner cannot archive their only active workspace
+      const activeMemberships = await Membership.find({
+        userId,
+        status: "active"
+      });
+
+      const otherMemberships = activeMemberships.filter(
+        (m) => m.tenantId.toString() !== workspaceId.toString()
+      );
+
+      let fallbackMembership = null;
+      let fallbackTenant = null;
+
+      for (const m of otherMemberships) {
+        const candidate = await Tenant.findById(m.tenantId);
+        if (candidate && candidate.status !== "archived") {
+          fallbackMembership = m;
+          fallbackTenant = candidate;
+          break;
+        }
+      }
+
+      if (!fallbackMembership || !fallbackTenant) {
+        return res.status(409).json({
+          success: false,
+          message: "Cannot archive your only active workspace. A user must retain at least one active workspace."
+        });
+      }
+
+      // 3. Soft-archive workspace: preserve all historical billing, usage, and service records
+      workspace.status = "archived";
+      workspace.archivedAt = new Date();
+      await workspace.save();
+
+      // 4. Update session and issue fresh scoped JWT if currently scoped to the archived workspace
+      const user = await User.findById(userId);
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: "User not found"
+        });
+      }
+
+      let activeTenant = fallbackTenant;
+      let activeRole = fallbackMembership.role;
+      let switched = false;
+      let token = null;
+
+      if (user.tenantId && user.tenantId.toString() === workspaceId.toString()) {
+        user.tenantId = fallbackTenant._id;
+        await user.save();
+        switched = true;
+
+        token = jwt.sign(
+          {
+            userId: user._id.toString(),
+            tenantId: fallbackTenant._id.toString()
+          },
+          process.env.JWT_SECRET,
+          {
+            expiresIn: "1d"
+          }
+        );
+      } else {
+        const currentTenant = await Tenant.findById(user.tenantId);
+        const currentMembership = await Membership.findOne({
+          userId,
+          tenantId: user.tenantId,
+          status: "active"
+        });
+
+        if (currentTenant && currentTenant.status !== "archived" && currentMembership) {
+          activeTenant = currentTenant;
+          activeRole = currentMembership.role;
+        } else {
+          user.tenantId = fallbackTenant._id;
+          await user.save();
+          switched = true;
+
+          token = jwt.sign(
+            {
+              userId: user._id.toString(),
+              tenantId: fallbackTenant._id.toString()
+            },
+            process.env.JWT_SECRET,
+            {
+              expiresIn: "1d"
+            }
+          );
+        }
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: "Workspace archived successfully",
+        data: {
+          archivedWorkspaceId: workspaceId,
+          token,
+          switched,
+          activeWorkspace: {
+            id: activeTenant._id,
+            name: activeTenant.name,
+            type: activeTenant.type || "organization",
+            role: activeRole
+          }
+        }
+      });
+    });
+  } catch (error) {
+    console.error("Archive workspace error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to archive workspace"
     });
   }
 }

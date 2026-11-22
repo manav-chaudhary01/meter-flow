@@ -766,6 +766,10 @@ describe("Frontend Static Serving & Security Boundaries", () => {
     assert.match(res.text, /id="leave-workspace-modal"/);
     assert.match(res.text, /id="leave-workspace-confirm-btn"/);
     assert.match(res.text, /You will lose access to this workspace and its team resources/);
+    assert.match(res.text, /id="open-archive-workspace-btn"/);
+    assert.match(res.text, /id="archive-workspace-modal"/);
+    assert.match(res.text, /id="archive-workspace-confirm-btn"/);
+    assert.match(res.text, /Active access to this workspace will be disabled for all members/);
   });
 
   it("GET /js/team.js should serve the team controller with safe DOM & valid pure helpers", async () => {
@@ -880,6 +884,13 @@ describe("Frontend Static Serving & Security Boundaries", () => {
     assert.equal(helpers.canLeaveWorkspace("member"), true);
     assert.equal(helpers.canLeaveWorkspace(""), false);
     assert.equal(helpers.canLeaveWorkspace(null), false);
+
+    // 4c. canArchiveWorkspace (role)
+    assert.equal(helpers.canArchiveWorkspace("owner"), true);
+    assert.equal(helpers.canArchiveWorkspace("admin"), false);
+    assert.equal(helpers.canArchiveWorkspace("member"), false);
+    assert.equal(helpers.canArchiveWorkspace(""), false);
+    assert.equal(helpers.canArchiveWorkspace(null), false);
 
     // 5. formatMemberRole
     assert.equal(helpers.formatMemberRole("owner").label, "Owner");

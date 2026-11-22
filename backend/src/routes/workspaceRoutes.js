@@ -9,7 +9,8 @@ import {
   removeWorkspaceMember,
   modifyWorkspaceMemberRole,
   modifyWorkspaceMemberStatus,
-  leaveWorkspace
+  leaveWorkspace,
+  archiveWorkspace
 } from "../controllers/workspaceController.js";
 import { authenticateToken } from "../middleware/authMiddleware.js";
 
@@ -21,6 +22,7 @@ router.get("/", listWorkspaces);
 router.post("/", createWorkspace);
 router.post("/switch", switchWorkspace);
 router.patch("/:id", renameWorkspace);
+router.patch("/:id/archive", archiveWorkspace);
 router.post("/:id/leave", leaveWorkspace);
 router.get("/:id/members", getWorkspaceMembers);
 router.post("/:id/members", addWorkspaceMember);

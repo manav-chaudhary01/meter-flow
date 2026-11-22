@@ -1,6 +1,7 @@
 import jwt from "jsonwebtoken";
 import Membership from "../models/Membership.js";
 import User from "../models/User.js";
+import Tenant from "../models/Tenant.js";
 
 export async function authenticateToken(req, res, next) {
   try {
@@ -60,6 +61,15 @@ export async function authenticateToken(req, res, next) {
       return res.status(403).json({
         success: false,
         message: "Access denied: you are not an active member of this workspace"
+      });
+    }
+
+    // 3. Verify target workspace exists and is not archived
+    const tenant = await Tenant.findById(decoded.tenantId);
+    if (!tenant || tenant.status === "archived") {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied: workspace is archived or inactive"
       });
     }
 

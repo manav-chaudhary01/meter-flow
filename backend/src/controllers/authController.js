@@ -218,14 +218,9 @@ export async function login(req, res) {
       });
     }
 
-    const tenant = await Tenant.findById(user.tenantId);
+    let tenant = await Tenant.findById(user.tenantId);
 
-    if (!tenant) {
-      return res.status(500).json({
-        success: false,
-        message: "Associated organization not found"
-      });
-    }
+    const isCurrentActive = tenant && tenant.status !== "archived";
 
     // Verify membership status for workspace
     const existingMembership = await Membership.findOne({
@@ -233,23 +228,39 @@ export async function login(req, res) {
       tenantId: user.tenantId
     });
 
-    if (existingMembership && existingMembership.status !== "active") {
-      // Check if user has an alternative active workspace
-      const otherActiveMembership = await Membership.findOne({
+    if (!isCurrentActive || (existingMembership && existingMembership.status !== "active")) {
+      // Check if user has an alternative active workspace that is not archived
+      const activeMemberships = await Membership.find({
         userId: user._id,
         status: "active"
       });
 
-      if (!otherActiveMembership) {
+      let validFallback = null;
+      let validTenant = null;
+
+      for (const m of activeMemberships) {
+        if (user.tenantId && m.tenantId.toString() === user.tenantId.toString() && !isCurrentActive) {
+          continue;
+        }
+        const candidateTenant = await Tenant.findById(m.tenantId);
+        if (candidateTenant && candidateTenant.status !== "archived") {
+          validFallback = m;
+          validTenant = candidateTenant;
+          break;
+        }
+      }
+
+      if (!validFallback || !validTenant) {
         return res.status(403).json({
           success: false,
-          message: "Access denied: your workspace membership is suspended or inactive"
+          message: "Access denied: your workspace is archived or inactive"
         });
       }
 
       // Point user to their active workspace
-      user.tenantId = otherActiveMembership.tenantId;
+      user.tenantId = validTenant._id;
       await user.save();
+      tenant = validTenant;
     }
 
     // Ensure membership exists for active workspace
