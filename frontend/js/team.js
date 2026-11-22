@@ -107,6 +107,41 @@
     }
   }
 
+  function formatMemberStatus(status) {
+    const normalized = (status || "active").toLowerCase();
+    if (normalized === "suspended") {
+      return { label: "Suspended", className: "badge badge-warning" };
+    }
+    return { label: "Active", className: "badge badge-success" };
+  }
+
+  function canModifyMemberStatus(currentUserRole, targetMemberRole, isSelf = false) {
+    if (isSelf) {
+      return false; // Users cannot suspend or modify their own status
+    }
+    if (targetMemberRole === "owner") {
+      return false; // Workspace owner can never be suspended or modified
+    }
+    if (currentUserRole === "owner") {
+      return true; // Owner can suspend/reactivate admins and members
+    }
+    if (currentUserRole === "admin") {
+      return targetMemberRole === "member"; // Admin can suspend/reactivate members, but not other admins
+    }
+    return false; // Regular members cannot suspend anyone
+  }
+
+  function validateModifyStatus(status) {
+    if (status === undefined || status === null || typeof status !== "string") {
+      return { valid: false, error: "Status is required and must be a string." };
+    }
+    const normalized = status.trim().toLowerCase();
+    if (!["active", "suspended"].includes(normalized)) {
+      return { valid: false, error: "Status must be 'active' or 'suspended'." };
+    }
+    return { valid: true, error: null, status: normalized };
+  }
+
   function getInitials(name) {
     if (!name || typeof name !== "string") return "U";
     return name
@@ -379,6 +414,10 @@
     if (!tbody) return;
     clearElement(tbody);
 
+    const apiClient = window.MeterFlowAPI || api;
+    const currentUser = apiClient && typeof apiClient.getUser === "function" ? apiClient.getUser() : null;
+    const currentUserId = currentUser ? String(currentUser.id || currentUser.userId || "") : "";
+
     const count = Array.isArray(members) ? members.length : 0;
     if (totalMetric) totalMetric.textContent = String(count);
     if (countBadge) countBadge.textContent = `${count} ${count === 1 ? "member" : "members"}`;
@@ -392,6 +431,8 @@
 
     members.forEach((member) => {
       const tr = document.createElement("tr");
+      const memberUserIdStr = member.userId ? String(member.userId) : "";
+      const isSelf = Boolean(currentUserId && memberUserIdStr && currentUserId === memberUserIdStr);
 
       // Column 1: Member (Avatar + Name)
       const tdMember = document.createElement("td");
@@ -425,7 +466,7 @@
       const roleBadge = document.createElement("span");
       roleBadge.className = roleInfo.className;
       roleBadge.textContent = roleInfo.label;
-      roleBadge.setAttribute("data-member-role-badge", String(member.userId));
+      roleBadge.setAttribute("data-member-role-badge", memberUserIdStr);
 
       if (canModifyMemberRole(currentWorkspaceRole, member.role)) {
         const roleWrapper = document.createElement("div");
@@ -434,7 +475,7 @@
         const roleSelect = document.createElement("select");
         roleSelect.className = "form-select role-select";
         roleSelect.setAttribute("aria-label", `Change role for ${member.name || member.email}`);
-        roleSelect.setAttribute("data-member-user-id", String(member.userId));
+        roleSelect.setAttribute("data-member-user-id", memberUserIdStr);
 
         const optMember = document.createElement("option");
         optMember.value = "member";
@@ -457,7 +498,6 @@
           roleSelect.disabled = true;
 
           try {
-            const apiClient = window.MeterFlowAPI || api;
             const res = await apiClient.patch(
               `/api/workspaces/${currentWorkspaceId}/members/${member.userId}/role`,
               { role: newRole }
@@ -493,16 +533,83 @@
         tdRole.appendChild(roleBadge);
       }
 
-      // Column 4: Joined Date
+      // Column 4: Status (Active / Suspended)
+      const tdStatus = document.createElement("td");
+      const statusInfo = formatMemberStatus(member.status);
+      const statusBadge = document.createElement("span");
+      statusBadge.className = statusInfo.className;
+      statusBadge.textContent = statusInfo.label;
+      statusBadge.setAttribute("data-member-status-badge", memberUserIdStr);
+      tdStatus.appendChild(statusBadge);
+
+      // Column 5: Joined Date
       const tdJoined = document.createElement("td");
       tdJoined.textContent = formatDate(member.joinedAt);
 
-      // Column 5: Actions (Remove Button or Protected Badge)
+      // Column 6: Actions (Suspend/Reactivate + Remove Button or Protected Badge)
       const tdActions = document.createElement("td");
       tdActions.style.textAlign = "right";
 
+      const actionsWrapper = document.createElement("div");
+      actionsWrapper.style.display = "inline-flex";
+      actionsWrapper.style.alignItems = "center";
+      actionsWrapper.style.gap = "var(--space-xs)";
+      actionsWrapper.style.justifyContent = "flex-end";
+
       const isOwner = member.role === "owner";
       const userCanRemove = canRemoveMember(currentWorkspaceRole, member.role, isOwner);
+      const userCanChangeStatus = canModifyMemberStatus(currentWorkspaceRole, member.role, isSelf);
+
+      if (userCanChangeStatus) {
+        const isSuspended = member.status === "suspended";
+        const statusBtn = document.createElement("button");
+        statusBtn.type = "button";
+        statusBtn.className = "btn btn-secondary btn-sm status-toggle-btn";
+        statusBtn.setAttribute("data-member-user-id", memberUserIdStr);
+        statusBtn.setAttribute("data-action", isSuspended ? "reactivate" : "suspend");
+        statusBtn.textContent = isSuspended ? "Reactivate" : "Suspend";
+        statusBtn.setAttribute(
+          "aria-label",
+          isSuspended
+            ? `Reactivate member ${member.name || member.email}`
+            : `Suspend member ${member.name || member.email}`
+        );
+
+        statusBtn.addEventListener("click", async () => {
+          const nextStatus = member.status === "suspended" ? "active" : "suspended";
+          statusBtn.disabled = true;
+          hidePageErrorBanner();
+
+          try {
+            const res = await apiClient.patch(
+              `/api/workspaces/${currentWorkspaceId}/members/${member.userId}/status`,
+              { status: nextStatus }
+            );
+
+            if (!res.success) {
+              throw new Error(res.message || "Failed to update member status");
+            }
+
+            member.status = nextStatus;
+            renderMembersTable(membersList);
+
+            if (nextStatus === "suspended") {
+              showPageSuccessBanner(
+                `Successfully suspended ${member.name || member.email}. Member access is paused, and historical billing/usage records remain intact.`
+              );
+            } else {
+              showPageSuccessBanner(
+                `Successfully reactivated ${member.name || member.email}. Workspace access has been restored.`
+              );
+            }
+          } catch (err) {
+            showPageErrorBanner(`Failed to update member status: ${err.message || "Unknown error"}`);
+            statusBtn.disabled = false;
+          }
+        });
+
+        actionsWrapper.appendChild(statusBtn);
+      }
 
       if (userCanRemove) {
         const removeBtn = document.createElement("button");
@@ -528,7 +635,11 @@
           openModal("remove-member-modal", document.getElementById("remove-member-confirm-btn"));
         });
 
-        tdActions.appendChild(removeBtn);
+        actionsWrapper.appendChild(removeBtn);
+      }
+
+      if (actionsWrapper.children.length > 0) {
+        tdActions.appendChild(actionsWrapper);
       } else if (isOwner) {
         const ownerTag = document.createElement("span");
         ownerTag.className = "badge badge-primary";
@@ -551,6 +662,7 @@
       tr.appendChild(tdMember);
       tr.appendChild(tdEmail);
       tr.appendChild(tdRole);
+      tr.appendChild(tdStatus);
       tr.appendChild(tdJoined);
       tr.appendChild(tdActions);
 
@@ -757,10 +869,13 @@
     validateWorkspaceForm,
     validateInviteMemberForm,
     validateModifyRole,
+    validateModifyStatus,
     canManageTeam,
     canModifyMemberRole,
+    canModifyMemberStatus,
     canRemoveMember,
     formatMemberRole,
+    formatMemberStatus,
     getInitials,
     formatDate,
     initTeamPage,

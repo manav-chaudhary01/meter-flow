@@ -752,6 +752,7 @@ describe("Frontend Static Serving & Security Boundaries", () => {
     assert.match(res.headers["content-type"], /text\/html/);
     assert.match(res.text, /Team &amp; Members — MeterFlow/);
     assert.match(res.text, /id="team-table"/);
+    assert.match(res.text, /<th scope="col">Status<\/th>/);
     assert.match(res.text, /id="open-invite-modal-btn"/);
     assert.match(res.text, /\+ Add Member/);
     assert.match(res.text, /Add Workspace Member/);
@@ -819,6 +820,16 @@ describe("Frontend Static Serving & Security Boundaries", () => {
     assert.equal(helpers.validateModifyRole("member").valid, true);
     assert.equal(helpers.validateModifyRole("member").role, "member");
 
+    // 2c. validateModifyStatus
+    assert.equal(helpers.validateModifyStatus("").valid, false);
+    assert.match(helpers.validateModifyStatus("").error, /active.*suspended/i);
+    assert.equal(helpers.validateModifyStatus("admin").valid, false);
+    assert.match(helpers.validateModifyStatus("admin").error, /active.*suspended/i);
+    assert.equal(helpers.validateModifyStatus("active").valid, true);
+    assert.equal(helpers.validateModifyStatus("active").status, "active");
+    assert.equal(helpers.validateModifyStatus("suspended").valid, true);
+    assert.equal(helpers.validateModifyStatus("suspended").status, "suspended");
+
     // 3. canManageTeam
     assert.equal(helpers.canManageTeam("owner"), true);
     assert.equal(helpers.canManageTeam("admin"), true);
@@ -835,6 +846,19 @@ describe("Frontend Static Serving & Security Boundaries", () => {
     assert.equal(helpers.canModifyMemberRole("member", "member"), false);
     assert.equal(helpers.canModifyMemberRole("member", "admin"), false);
     assert.equal(helpers.canModifyMemberRole("member", "owner"), false);
+
+    // 3c. canModifyMemberStatus (currentUserRole, targetMemberRole, isSelf)
+    assert.equal(helpers.canModifyMemberStatus("owner", "member", false), true);
+    assert.equal(helpers.canModifyMemberStatus("owner", "admin", false), true);
+    assert.equal(helpers.canModifyMemberStatus("owner", "owner", false), false);
+    assert.equal(helpers.canModifyMemberStatus("owner", "member", true), false);
+    assert.equal(helpers.canModifyMemberStatus("admin", "member", false), true);
+    assert.equal(helpers.canModifyMemberStatus("admin", "admin", false), false);
+    assert.equal(helpers.canModifyMemberStatus("admin", "owner", false), false);
+    assert.equal(helpers.canModifyMemberStatus("admin", "member", true), false);
+    assert.equal(helpers.canModifyMemberStatus("member", "member", false), false);
+    assert.equal(helpers.canModifyMemberStatus("member", "admin", false), false);
+    assert.equal(helpers.canModifyMemberStatus("member", "owner", false), false);
 
     // 4. canRemoveMember (currentUserRole, targetMemberRole, isWorkspaceOwner)
     assert.equal(helpers.canRemoveMember("owner", "admin", false), true);
@@ -853,6 +877,12 @@ describe("Frontend Static Serving & Security Boundaries", () => {
     assert.match(helpers.formatMemberRole("admin").className, /badge-info/);
     assert.equal(helpers.formatMemberRole("member").label, "Member");
     assert.match(helpers.formatMemberRole("member").className, /badge-neutral/);
+
+    // 5b. formatMemberStatus
+    assert.equal(helpers.formatMemberStatus("active").label, "Active");
+    assert.match(helpers.formatMemberStatus("active").className, /badge-success/);
+    assert.equal(helpers.formatMemberStatus("suspended").label, "Suspended");
+    assert.match(helpers.formatMemberStatus("suspended").className, /badge-warning/);
 
     // 6. getInitials & formatDate
     assert.equal(helpers.getInitials("Alice Smith"), "AS");

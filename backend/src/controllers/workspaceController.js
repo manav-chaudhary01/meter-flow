@@ -304,7 +304,7 @@ export async function getWorkspaceMembers(req, res) {
 
     const memberships = await Membership.find({
       tenantId: workspaceId,
-      status: "active"
+      status: { $in: ["active", "suspended"] }
     }).populate("userId", "name email");
 
     const members = memberships
@@ -314,6 +314,7 @@ export async function getWorkspaceMembers(req, res) {
         name: m.userId.name,
         email: m.userId.email,
         role: m.role,
+        status: m.status || "active",
         joinedAt: m.createdAt
       }));
 
@@ -625,6 +626,122 @@ export async function modifyWorkspaceMemberRole(req, res) {
     return res.status(500).json({
       success: false,
       message: "Failed to modify member role"
+    });
+  }
+}
+
+export async function modifyWorkspaceMemberStatus(req, res) {
+  try {
+    const { id: workspaceId, memberUserId } = req.params;
+    const { status } = req.body;
+
+    if (
+      !mongoose.Types.ObjectId.isValid(workspaceId) ||
+      !mongoose.Types.ObjectId.isValid(memberUserId)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid workspace or member user ID"
+      });
+    }
+
+    if (status === undefined || status === null || typeof status !== "string") {
+      return res.status(400).json({
+        success: false,
+        message: "Status is required and must be a string"
+      });
+    }
+
+    const normalizedStatus = status.trim().toLowerCase();
+    if (!["active", "suspended"].includes(normalizedStatus)) {
+      return res.status(400).json({
+        success: false,
+        message: "Status must be 'active' or 'suspended'"
+      });
+    }
+
+    // Caller must be an active member of this workspace with role 'owner' or 'admin'
+    const callerMembership = await Membership.findOne({
+      userId: req.user.userId,
+      tenantId: workspaceId,
+      status: "active"
+    });
+
+    if (!callerMembership) {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied: you are not an active member of this workspace"
+      });
+    }
+
+    if (!["owner", "admin"].includes(callerMembership.role)) {
+      return res.status(403).json({
+        success: false,
+        message: "Only workspace owners and admins can modify member status"
+      });
+    }
+
+    const targetMembership = await Membership.findOne({
+      userId: memberUserId,
+      tenantId: workspaceId
+    });
+
+    if (!targetMembership) {
+      return res.status(404).json({
+        success: false,
+        message: "Membership not found"
+      });
+    }
+
+    // Owner protection: Workspace owner can NEVER be suspended or have status modified
+    if (targetMembership.role === "owner") {
+      return res.status(403).json({
+        success: false,
+        message: "Workspace owner cannot be suspended or have status modified"
+      });
+    }
+
+    // Self-protection: A user cannot modify their own status
+    if (req.user.userId.toString() === memberUserId.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: "Users cannot modify their own membership status"
+      });
+    }
+
+    // Admin vs Admin protection: Admins cannot suspend or modify other admins
+    if (callerMembership.role === "admin" && targetMembership.role === "admin") {
+      return res.status(403).json({
+        success: false,
+        message: "Admins cannot modify other admins' status"
+      });
+    }
+
+    targetMembership.status = normalizedStatus;
+    await targetMembership.save();
+
+    const targetUser = await User.findById(memberUserId);
+
+    return res.status(200).json({
+      success: true,
+      message: `Member ${normalizedStatus === "suspended" ? "suspended" : "reactivated"} successfully`,
+      data: {
+        member: {
+          userId: targetMembership.userId,
+          name: targetUser ? targetUser.name : "",
+          email: targetUser ? targetUser.email : "",
+          role: targetMembership.role,
+          status: targetMembership.status,
+          joinedAt: targetMembership.createdAt,
+          updatedAt: targetMembership.updatedAt
+        }
+      }
+    });
+  } catch (error) {
+    console.error("Modify workspace member status error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to modify member status"
     });
   }
 }
