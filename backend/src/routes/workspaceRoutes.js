@@ -8,7 +8,8 @@ import {
   addWorkspaceMember,
   removeWorkspaceMember,
   modifyWorkspaceMemberRole,
-  modifyWorkspaceMemberStatus
+  modifyWorkspaceMemberStatus,
+  leaveWorkspace
 } from "../controllers/workspaceController.js";
 import { authenticateToken } from "../middleware/authMiddleware.js";
 
@@ -20,6 +21,7 @@ router.get("/", listWorkspaces);
 router.post("/", createWorkspace);
 router.post("/switch", switchWorkspace);
 router.patch("/:id", renameWorkspace);
+router.post("/:id/leave", leaveWorkspace);
 router.get("/:id/members", getWorkspaceMembers);
 router.post("/:id/members", addWorkspaceMember);
 router.patch("/:id/members/:memberUserId/role", modifyWorkspaceMemberRole);

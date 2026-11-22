@@ -122,9 +122,12 @@
             <h1>Team &amp; Workspace Members</h1>
             <p>Manage team members, roles, and collaborative access for your organization workspace.</p>
           </div>
-          <div>
+          <div style="display: flex; gap: var(--space-sm); align-items: center;">
             <button id="open-invite-modal-btn" class="btn btn-primary" aria-label="Add existing team member">
               + Add Member
+            </button>
+            <button type="button" id="open-leave-workspace-btn" class="btn btn-secondary" style="color: var(--color-danger); border-color: var(--color-danger); display: none;" aria-label="Leave current workspace">
+              Leave Workspace
             </button>
           </div>
         </div>
@@ -281,6 +284,27 @@
           <button type="submit" id="invite-member-submit-btn" class="btn btn-primary">Add Member</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- Leave Workspace Confirmation Modal -->
+  <div id="leave-workspace-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="leave-workspace-title">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 id="leave-workspace-title">Leave Workspace</h3>
+        <button type="button" class="modal-close-btn" data-close-modal="leave-workspace-modal" aria-label="Close dialog">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="leave-workspace-error" class="alert alert-error" style="display: none;" role="alert"></div>
+        <p>You will lose access to this workspace and its team resources. Your historical billing and usage records will remain preserved.</p>
+        <p class="text-muted" style="font-size: 0.85rem; margin-top: var(--space-sm);">
+          If you have another active workspace, you will be switched to it automatically.
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-close-modal="leave-workspace-modal">Cancel</button>
+        <button type="button" id="leave-workspace-confirm-btn" class="btn btn-danger">Leave Workspace</button>
+      </div>
     </div>
   </div>
 

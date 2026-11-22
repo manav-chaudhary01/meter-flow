@@ -142,6 +142,12 @@
     return { valid: true, error: null, status: normalized };
   }
 
+  function canLeaveWorkspace(role) {
+    if (!role || typeof role !== "string") return false;
+    const normalized = role.trim().toLowerCase();
+    return normalized !== "owner";
+  }
+
   function getInitials(name) {
     if (!name || typeof name !== "string") return "U";
     return name
@@ -312,6 +318,15 @@
         inviteBtn.disabled = false;
         inviteBtn.title = "Add an existing user to this workspace";
         inviteBtn.removeAttribute("aria-disabled");
+      }
+    }
+
+    const leaveBtn = document.getElementById("open-leave-workspace-btn");
+    if (leaveBtn) {
+      if (canLeaveWorkspace(role)) {
+        leaveBtn.style.display = "inline-flex";
+      } else {
+        leaveBtn.style.display = "none";
       }
     }
 
@@ -638,6 +653,28 @@
         actionsWrapper.appendChild(removeBtn);
       }
 
+      // Self-leave action: Allow non-owner to initiate voluntary self-leave from their row
+      if (isSelf && canLeaveWorkspace(currentWorkspaceRole)) {
+        const leaveRowBtn = document.createElement("button");
+        leaveRowBtn.type = "button";
+        leaveRowBtn.className = "btn btn-secondary btn-sm leave-row-btn";
+        leaveRowBtn.style.color = "var(--color-danger)";
+        leaveRowBtn.style.borderColor = "var(--color-danger)";
+        leaveRowBtn.textContent = "Leave";
+        leaveRowBtn.setAttribute("aria-label", "Leave this workspace");
+
+        leaveRowBtn.addEventListener("click", () => {
+          const leaveError = document.getElementById("leave-workspace-error");
+          if (leaveError) {
+            leaveError.textContent = "";
+            leaveError.style.display = "none";
+          }
+          openModal("leave-workspace-modal", document.getElementById("leave-workspace-confirm-btn"));
+        });
+
+        actionsWrapper.appendChild(leaveRowBtn);
+      }
+
       if (actionsWrapper.children.length > 0) {
         tdActions.appendChild(actionsWrapper);
       } else if (isOwner) {
@@ -830,7 +867,87 @@
       });
     }
 
-    // 5. Refresh Team Button
+    // 5. Leave Workspace Modal
+    const openLeaveBtn = document.getElementById("open-leave-workspace-btn");
+    const leaveConfirmBtn = document.getElementById("leave-workspace-confirm-btn");
+    const leaveError = document.getElementById("leave-workspace-error");
+
+    if (openLeaveBtn && !openLeaveBtn.dataset.hasOpenListener) {
+      openLeaveBtn.dataset.hasOpenListener = "true";
+      openLeaveBtn.addEventListener("click", () => {
+        if (leaveError) {
+          leaveError.textContent = "";
+          leaveError.style.display = "none";
+        }
+        openModal("leave-workspace-modal", leaveConfirmBtn);
+      });
+    }
+
+    if (leaveConfirmBtn && !leaveConfirmBtn.dataset.hasConfirmListener) {
+      leaveConfirmBtn.dataset.hasConfirmListener = "true";
+      leaveConfirmBtn.addEventListener("click", async () => {
+        if (leaveConfirmBtn.disabled || !currentWorkspaceId) return;
+
+        if (leaveError) {
+          leaveError.textContent = "";
+          leaveError.style.display = "none";
+        }
+
+        leaveConfirmBtn.disabled = true;
+        leaveConfirmBtn.textContent = "";
+        const spinner = document.createElement("span");
+        spinner.className = "btn-spinner";
+        leaveConfirmBtn.appendChild(spinner);
+        leaveConfirmBtn.appendChild(document.createTextNode(" Leaving..."));
+
+        try {
+          const apiClient = window.MeterFlowAPI || api;
+          const res = await apiClient.post(`/api/workspaces/${currentWorkspaceId}/leave`);
+
+          if (!res.success) {
+            throw new Error(res.message || "Failed to leave workspace");
+          }
+
+          if (res.data) {
+            if (res.data.token) {
+              apiClient.setToken(res.data.token);
+            }
+            if (res.data.activeWorkspace) {
+              apiClient.setTenant(res.data.activeWorkspace);
+              const user = apiClient.getUser();
+              if (user) {
+                user.tenantId = res.data.activeWorkspace.id;
+                apiClient.setUser(user);
+              }
+              currentWorkspaceId = res.data.activeWorkspace.id;
+              currentWorkspaceRole = res.data.activeWorkspace.role || "member";
+              currentWorkspaceType = res.data.activeWorkspace.type || "organization";
+            }
+          }
+
+          closeModal("leave-workspace-modal");
+          showPageSuccessBanner("You have successfully left the workspace.");
+
+          // Reset table and reload workspaces & members
+          const tbody = document.getElementById("team-table-body");
+          clearElement(tbody);
+          membersList = [];
+
+          await loadWorkspaces();
+          await loadMembers();
+        } catch (err) {
+          if (leaveError) {
+            leaveError.textContent = err.message || "Failed to leave workspace";
+            leaveError.style.display = "block";
+          }
+        } finally {
+          leaveConfirmBtn.disabled = false;
+          leaveConfirmBtn.textContent = "Leave Workspace";
+        }
+      });
+    }
+
+    // 6. Refresh Team Button
     const refreshBtn = document.getElementById("refresh-team-btn");
     if (refreshBtn && !refreshBtn.dataset.hasRefreshListener) {
       refreshBtn.dataset.hasRefreshListener = "true";
@@ -874,6 +991,7 @@
     canModifyMemberRole,
     canModifyMemberStatus,
     canRemoveMember,
+    canLeaveWorkspace,
     formatMemberRole,
     formatMemberStatus,
     getInitials,

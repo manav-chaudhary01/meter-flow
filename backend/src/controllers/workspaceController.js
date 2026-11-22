@@ -745,3 +745,169 @@ export async function modifyWorkspaceMemberStatus(req, res) {
     });
   }
 }
+
+// In-process concurrency mutex for user-level critical sections (e.g. self-leave)
+const userLocks = new Map();
+
+export async function withUserLock(userId, fn) {
+  const key = userId.toString();
+  while (userLocks.has(key)) {
+    await userLocks.get(key);
+  }
+  let resolve;
+  const promise = new Promise((r) => {
+    resolve = r;
+  });
+  userLocks.set(key, promise);
+  try {
+    return await fn();
+  } finally {
+    userLocks.delete(key);
+    resolve();
+  }
+}
+
+export async function leaveWorkspace(req, res) {
+  try {
+    const { id: workspaceId } = req.params;
+
+    if (!workspaceId || !mongoose.Types.ObjectId.isValid(workspaceId)) {
+      return res.status(400).json({
+        success: false,
+        message: "A valid workspace ID is required"
+      });
+    }
+
+    const userId = req.user.userId;
+
+    return await withUserLock(userId, async () => {
+      // 1. Verify target membership in the specified workspace
+      const targetMembership = await Membership.findOne({
+        userId,
+        tenantId: workspaceId
+      });
+
+      if (!targetMembership) {
+        return res.status(403).json({
+          success: false,
+          message: "Access denied: you are not a member of this workspace"
+        });
+      }
+
+      if (targetMembership.status !== "active") {
+        return res.status(403).json({
+          success: false,
+          message: "Access denied: your workspace membership is suspended or inactive"
+        });
+      }
+
+      // 2. Critical owner protection: Workspace owners can NEVER self-leave
+      if (targetMembership.role === "owner") {
+        return res.status(403).json({
+          success: false,
+          message: "Workspace owners cannot leave the workspace. Ownership must be transferred or workspace archived."
+        });
+      }
+
+      // 3. Last-workspace protection: User must retain at least one active workspace
+      const activeMemberships = await Membership.find({
+        userId,
+        status: "active"
+      });
+
+      const otherMemberships = activeMemberships.filter(
+        (m) => m.tenantId.toString() !== workspaceId.toString()
+      );
+
+      let fallbackMembership = null;
+      let fallbackTenant = null;
+
+      for (const m of otherMemberships) {
+        const tenant = await Tenant.findById(m.tenantId);
+        if (tenant) {
+          fallbackMembership = m;
+          fallbackTenant = tenant;
+          break;
+        }
+      }
+
+      if (!fallbackMembership || !fallbackTenant) {
+        return res.status(409).json({
+          success: false,
+          message: "Cannot leave your only active workspace. A user must retain at least one active workspace."
+        });
+      }
+
+      // 4. Remove the user's membership from the departed workspace
+      await Membership.findByIdAndDelete(targetMembership._id);
+
+      // 5. Update User.tenantId pointer if it pointed to the departed workspace
+      const user = await User.findById(userId);
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: "User not found"
+        });
+      }
+
+      let activeTenant = fallbackTenant;
+      let activeRole = fallbackMembership.role;
+      let switched = false;
+
+      if (user.tenantId && user.tenantId.toString() === workspaceId.toString()) {
+        user.tenantId = fallbackTenant._id;
+        await user.save();
+        switched = true;
+      } else {
+        const currentTenant = await Tenant.findById(user.tenantId);
+        const currentMembership = await Membership.findOne({
+          userId,
+          tenantId: user.tenantId,
+          status: "active"
+        });
+        if (currentTenant && currentMembership) {
+          activeTenant = currentTenant;
+          activeRole = currentMembership.role;
+        } else {
+          user.tenantId = fallbackTenant._id;
+          await user.save();
+          switched = true;
+        }
+      }
+
+      // 6. Sign fresh JWT scoped to the active workspace context
+      const token = jwt.sign(
+        {
+          userId: user._id.toString(),
+          tenantId: activeTenant._id.toString()
+        },
+        process.env.JWT_SECRET,
+        {
+          expiresIn: "1d"
+        }
+      );
+
+      return res.status(200).json({
+        success: true,
+        message: "Left workspace successfully",
+        data: {
+          leftWorkspaceId: workspaceId,
+          token,
+          switched,
+          activeWorkspace: {
+            id: activeTenant._id,
+            name: activeTenant.name,
+            type: activeTenant.type || "organization",
+            role: activeRole
+          }
+        }
+      });
+    });
+  } catch (error) {
+    console.error("Leave workspace error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to leave workspace"
+    });
+  }
+}
