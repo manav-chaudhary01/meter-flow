@@ -6,7 +6,8 @@ import {
   renameWorkspace,
   getWorkspaceMembers,
   addWorkspaceMember,
-  removeWorkspaceMember
+  removeWorkspaceMember,
+  modifyWorkspaceMemberRole
 } from "../controllers/workspaceController.js";
 import { authenticateToken } from "../middleware/authMiddleware.js";
 
@@ -20,6 +21,7 @@ router.post("/switch", switchWorkspace);
 router.patch("/:id", renameWorkspace);
 router.get("/:id/members", getWorkspaceMembers);
 router.post("/:id/members", addWorkspaceMember);
+router.patch("/:id/members/:memberUserId/role", modifyWorkspaceMemberRole);
 router.delete("/:id/members/:memberUserId", removeWorkspaceMember);
 
 export default router;

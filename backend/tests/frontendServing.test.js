@@ -807,11 +807,34 @@ describe("Frontend Static Serving & Security Boundaries", () => {
     assert.equal(helpers.validateInviteMemberForm({ email: "user@example.com", role: "admin" }).valid, true);
     assert.equal(helpers.validateInviteMemberForm({ email: "user@example.com", role: "member" }).valid, true);
 
+    // 2b. validateModifyRole
+    assert.equal(helpers.validateModifyRole("").valid, false);
+    assert.match(helpers.validateModifyRole("").error, /admin.*member/i);
+    assert.equal(helpers.validateModifyRole("owner").valid, false);
+    assert.match(helpers.validateModifyRole("owner").error, /cannot assign owner/i);
+    assert.equal(helpers.validateModifyRole("invalid-role").valid, false);
+    assert.match(helpers.validateModifyRole("invalid-role").error, /admin.*member/i);
+    assert.equal(helpers.validateModifyRole("admin").valid, true);
+    assert.equal(helpers.validateModifyRole("admin").role, "admin");
+    assert.equal(helpers.validateModifyRole("member").valid, true);
+    assert.equal(helpers.validateModifyRole("member").role, "member");
+
     // 3. canManageTeam
     assert.equal(helpers.canManageTeam("owner"), true);
     assert.equal(helpers.canManageTeam("admin"), true);
     assert.equal(helpers.canManageTeam("member"), false);
     assert.equal(helpers.canManageTeam("viewer"), false);
+
+    // 3b. canModifyMemberRole (currentUserRole, targetMemberRole)
+    assert.equal(helpers.canModifyMemberRole("owner", "member"), true);
+    assert.equal(helpers.canModifyMemberRole("owner", "admin"), true);
+    assert.equal(helpers.canModifyMemberRole("owner", "owner"), false);
+    assert.equal(helpers.canModifyMemberRole("admin", "member"), false);
+    assert.equal(helpers.canModifyMemberRole("admin", "admin"), false);
+    assert.equal(helpers.canModifyMemberRole("admin", "owner"), false);
+    assert.equal(helpers.canModifyMemberRole("member", "member"), false);
+    assert.equal(helpers.canModifyMemberRole("member", "admin"), false);
+    assert.equal(helpers.canModifyMemberRole("member", "owner"), false);
 
     // 4. canRemoveMember (currentUserRole, targetMemberRole, isWorkspaceOwner)
     assert.equal(helpers.canRemoveMember("owner", "admin", false), true);

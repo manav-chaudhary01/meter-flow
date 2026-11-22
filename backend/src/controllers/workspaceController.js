@@ -521,3 +521,110 @@ export async function removeWorkspaceMember(req, res) {
     });
   }
 }
+
+export async function modifyWorkspaceMemberRole(req, res) {
+  try {
+    const { id: workspaceId, memberUserId } = req.params;
+    const { role } = req.body;
+
+    if (
+      !mongoose.Types.ObjectId.isValid(workspaceId) ||
+      !mongoose.Types.ObjectId.isValid(memberUserId)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid workspace or member user ID"
+      });
+    }
+
+    if (role === undefined || role === null || typeof role !== "string") {
+      return res.status(400).json({
+        success: false,
+        message: "Role is required and must be a string"
+      });
+    }
+
+    const normalizedRole = role.trim().toLowerCase();
+
+    if (normalizedRole === "owner") {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot assign owner role through role modification"
+      });
+    }
+
+    if (!["admin", "member"].includes(normalizedRole)) {
+      return res.status(400).json({
+        success: false,
+        message: "Role must be 'admin' or 'member'"
+      });
+    }
+
+    // Caller must be an active member of this workspace with role 'owner'
+    const callerMembership = await Membership.findOne({
+      userId: req.user.userId,
+      tenantId: workspaceId,
+      status: "active"
+    });
+
+    if (!callerMembership) {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied: you are not an active member of this workspace"
+      });
+    }
+
+    if (callerMembership.role !== "owner") {
+      return res.status(403).json({
+        success: false,
+        message: "Forbidden: only workspace owners can modify member roles"
+      });
+    }
+
+    const targetMembership = await Membership.findOne({
+      userId: memberUserId,
+      tenantId: workspaceId
+    });
+
+    if (!targetMembership) {
+      return res.status(404).json({
+        success: false,
+        message: "Membership not found"
+      });
+    }
+
+    // Workspace owner role cannot be modified or demoted
+    if (targetMembership.role === "owner") {
+      return res.status(403).json({
+        success: false,
+        message: "Workspace owner role cannot be modified"
+      });
+    }
+
+    targetMembership.role = normalizedRole;
+    await targetMembership.save();
+
+    const targetUser = await User.findById(memberUserId);
+
+    return res.status(200).json({
+      success: true,
+      message: "Member role updated successfully",
+      data: {
+        member: {
+          userId: targetMembership.userId,
+          name: targetUser ? targetUser.name : "",
+          email: targetUser ? targetUser.email : "",
+          role: targetMembership.role,
+          joinedAt: targetMembership.createdAt,
+          updatedAt: targetMembership.updatedAt
+        }
+      }
+    });
+  } catch (error) {
+    console.error("Modify workspace member role error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to modify member role"
+    });
+  }
+}

@@ -973,6 +973,35 @@ textarea:focus-visible,
   color: var(--color-text-muted);
 }
 
+.role-control-wrapper {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.role-select {
+  width: auto;
+  min-width: 95px;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  border-radius: var(--radius-sm);
+  background-color: #ffffff;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-main);
+  cursor: pointer;
+}
+
+.role-select:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px var(--color-primary-focus);
+}
+
+.role-select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 /* ==========================================================================
    Responsive Adaptations
    ========================================================================== */

@@ -57,6 +57,30 @@
     return role === "owner" || role === "admin";
   }
 
+  function canModifyMemberRole(currentUserRole, targetMemberRole) {
+    if (currentUserRole !== "owner") {
+      return false; // Only owners can modify member roles
+    }
+    if (targetMemberRole === "owner") {
+      return false; // Owner role cannot be modified or demoted
+    }
+    return targetMemberRole === "admin" || targetMemberRole === "member";
+  }
+
+  function validateModifyRole(role) {
+    if (role === undefined || role === null || typeof role !== "string") {
+      return { valid: false, error: "Role is required and must be a string." };
+    }
+    const normalized = role.trim().toLowerCase();
+    if (normalized === "owner") {
+      return { valid: false, error: "Cannot assign owner role through role modification." };
+    }
+    if (!["admin", "member"].includes(normalized)) {
+      return { valid: false, error: "Role must be 'admin' or 'member'." };
+    }
+    return { valid: true, error: null, role: normalized };
+  }
+
   function canRemoveMember(currentUserRole, targetMemberRole, isWorkspaceOwner = false) {
     if (isWorkspaceOwner || targetMemberRole === "owner") {
       return false; // Cannot remove workspace owner
@@ -395,13 +419,79 @@
       const tdEmail = document.createElement("td");
       tdEmail.textContent = member.email || "—";
 
-      // Column 3: Role Badge
+      // Column 3: Role (Badge + Accessible Role Select for Owners)
       const tdRole = document.createElement("td");
       const roleInfo = formatMemberRole(member.role);
       const roleBadge = document.createElement("span");
       roleBadge.className = roleInfo.className;
       roleBadge.textContent = roleInfo.label;
-      tdRole.appendChild(roleBadge);
+      roleBadge.setAttribute("data-member-role-badge", String(member.userId));
+
+      if (canModifyMemberRole(currentWorkspaceRole, member.role)) {
+        const roleWrapper = document.createElement("div");
+        roleWrapper.className = "role-control-wrapper";
+
+        const roleSelect = document.createElement("select");
+        roleSelect.className = "form-select role-select";
+        roleSelect.setAttribute("aria-label", `Change role for ${member.name || member.email}`);
+        roleSelect.setAttribute("data-member-user-id", String(member.userId));
+
+        const optMember = document.createElement("option");
+        optMember.value = "member";
+        optMember.textContent = "Member";
+        if (member.role === "member") optMember.selected = true;
+
+        const optAdmin = document.createElement("option");
+        optAdmin.value = "admin";
+        optAdmin.textContent = "Admin";
+        if (member.role === "admin") optAdmin.selected = true;
+
+        roleSelect.appendChild(optMember);
+        roleSelect.appendChild(optAdmin);
+
+        roleSelect.addEventListener("change", async (e) => {
+          const newRole = e.target.value;
+          if (!newRole || newRole === member.role) return;
+
+          hidePageErrorBanner();
+          roleSelect.disabled = true;
+
+          try {
+            const apiClient = window.MeterFlowAPI || api;
+            const res = await apiClient.patch(
+              `/api/workspaces/${currentWorkspaceId}/members/${member.userId}/role`,
+              { role: newRole }
+            );
+
+            if (!res.success) {
+              throw new Error(res.message || "Failed to update member role");
+            }
+
+            member.role = newRole;
+            const updatedInfo = formatMemberRole(newRole);
+            roleBadge.className = updatedInfo.className;
+            roleBadge.textContent = updatedInfo.label;
+
+            // Re-render table to refresh contextual action permissions
+            renderMembersTable(membersList);
+
+            showPageSuccessBanner(
+              `Successfully updated ${member.name || member.email}'s role to ${updatedInfo.label}.`
+            );
+          } catch (err) {
+            roleSelect.value = member.role;
+            showPageErrorBanner(`Failed to update member role: ${err.message || "Unknown error"}`);
+          } finally {
+            roleSelect.disabled = false;
+          }
+        });
+
+        roleWrapper.appendChild(roleBadge);
+        roleWrapper.appendChild(roleSelect);
+        tdRole.appendChild(roleWrapper);
+      } else {
+        tdRole.appendChild(roleBadge);
+      }
 
       // Column 4: Joined Date
       const tdJoined = document.createElement("td");
@@ -666,7 +756,9 @@
   window.MeterFlowTeam = {
     validateWorkspaceForm,
     validateInviteMemberForm,
+    validateModifyRole,
     canManageTeam,
+    canModifyMemberRole,
     canRemoveMember,
     formatMemberRole,
     getInitials,
