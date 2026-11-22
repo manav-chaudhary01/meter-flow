@@ -122,8 +122,8 @@
             <p>Manage team members, roles, and collaborative access for your organization workspace.</p>
           </div>
           <div>
-            <button id="open-invite-modal-btn" class="btn btn-primary" aria-label="Invite new team member">
-              + Invite Member
+            <button id="open-invite-modal-btn" class="btn btn-primary" aria-label="Add existing team member">
+              + Add Member
             </button>
           </div>
         </div>
@@ -224,11 +224,11 @@
     </div>
   </div>
 
-  <!-- Invite Member Modal -->
+  <!-- Add Member Modal -->
   <div id="invite-member-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="invite-member-title">
     <div class="modal-dialog">
       <div class="modal-header">
-        <h3 id="invite-member-title">Invite Team Member</h3>
+        <h3 id="invite-member-title">Add Workspace Member</h3>
         <button type="button" class="modal-close-btn" data-close-modal="invite-member-modal" aria-label="Close dialog">&times;</button>
       </div>
       <form id="invite-member-form" novalidate>
@@ -238,20 +238,20 @@
           <div class="form-group">
             <label for="invite-member-email" class="form-label">Member Email *</label>
             <input type="email" id="invite-member-email" class="form-input" required placeholder="colleague@example.com">
-            <span class="form-hint">The user must already have a MeterFlow account registered with this email.</span>
+            <span class="form-hint">Enter the email address of an existing MeterFlow user. They will immediately gain access to this workspace according to the selected role.</span>
           </div>
 
           <div class="form-group">
             <label for="invite-member-role" class="form-label">Workspace Role *</label>
             <select id="invite-member-role" class="form-select" required>
               <option value="member" selected>Member (View resources, usage, invoices &amp; budgets)</option>
-              <option value="admin">Admin (Manage services, budgets &amp; invite/remove members)</option>
+              <option value="admin">Admin (Manage services, budgets &amp; add/remove members)</option>
             </select>
           </div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-close-modal="invite-member-modal">Cancel</button>
-          <button type="submit" id="invite-member-submit-btn" class="btn btn-primary">Invite Member</button>
+          <button type="submit" id="invite-member-submit-btn" class="btn btn-primary">Add Member</button>
         </div>
       </form>
     </div>

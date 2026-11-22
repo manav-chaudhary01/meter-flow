@@ -1,6 +1,6 @@
 /**
  * MeterFlow Team & Member Management Screen Controller
- * Handles workspace members roster, invites, removals, and RBAC permissions.
+ * Handles workspace members roster, adding members, removals, and RBAC permissions.
  * Strictly safe DOM manipulation with zero innerHTML and full keyboard a11y.
  */
 
@@ -247,11 +247,11 @@
         inviteBtn.setAttribute("aria-disabled", "true");
       } else if (!canManageTeam(role)) {
         inviteBtn.disabled = true;
-        inviteBtn.title = "Only workspace owners and admins can invite members";
+        inviteBtn.title = "Only workspace owners and admins can add members";
         inviteBtn.setAttribute("aria-disabled", "true");
       } else {
         inviteBtn.disabled = false;
-        inviteBtn.title = "Invite a team member to this workspace";
+        inviteBtn.title = "Add an existing user to this workspace";
         inviteBtn.removeAttribute("aria-disabled");
       }
     }
@@ -545,7 +545,7 @@
           const spinner = document.createElement("span");
           spinner.className = "btn-spinner";
           inviteSubmitBtn.appendChild(spinner);
-          inviteSubmitBtn.appendChild(document.createTextNode(" Inviting..."));
+          inviteSubmitBtn.appendChild(document.createTextNode(" Adding..."));
         }
 
         try {
@@ -556,21 +556,21 @@
           });
 
           if (!res.success) {
-            throw new Error(res.message || "Failed to invite member");
+            throw new Error(res.message || "Failed to add member");
           }
 
           closeModal("invite-member-modal", openInviteBtn);
-          showPageSuccessBanner(`Successfully invited ${email} as ${role}.`);
+          showPageSuccessBanner(`Successfully added ${email} as ${role}.`);
           await loadMembers();
         } catch (err) {
           if (inviteError) {
-            inviteError.textContent = err.message || "Failed to invite member";
+            inviteError.textContent = err.message || "Failed to add member";
             inviteError.style.display = "flex";
           }
         } finally {
           if (inviteSubmitBtn) {
             inviteSubmitBtn.disabled = false;
-            inviteSubmitBtn.textContent = "Invite Member";
+            inviteSubmitBtn.textContent = "Add Member";
           }
         }
       });

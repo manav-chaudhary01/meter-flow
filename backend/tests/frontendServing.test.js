@@ -27,6 +27,7 @@ describe("Frontend Static Serving & Security Boundaries", () => {
     assert.match(res.headers["content-type"], /text\/html/);
     assert.match(res.text, /Create Workspace — MeterFlow/);
     assert.match(res.text, /id="register-form"/);
+    assert.match(res.text, /Every MeterFlow account starts with an initial workspace/);
   });
 
   it("GET /css/styles.css should serve the stylesheet with text/css content-type", async () => {
@@ -742,6 +743,9 @@ describe("Frontend Static Serving & Security Boundaries", () => {
     assert.match(res.text, /Team &amp; Members — MeterFlow/);
     assert.match(res.text, /id="team-table"/);
     assert.match(res.text, /id="open-invite-modal-btn"/);
+    assert.match(res.text, /\+ Add Member/);
+    assert.match(res.text, /Add Workspace Member/);
+    assert.match(res.text, /Enter the email address of an existing MeterFlow user/);
     assert.match(res.text, /id="invite-member-modal"/);
     assert.match(res.text, /id="remove-member-modal"/);
     assert.match(res.text, /id="create-workspace-modal"/);
