@@ -147,6 +147,16 @@ describe("Frontend Static Serving & Security Boundaries", () => {
     assert.match(auth.validateRegisterForm({ name: "User", email: "bad-email", password: "password", organizationName: "Org" }).error, /valid email/i);
     assert.match(auth.validateRegisterForm({ name: "User", email: "user@example.com", password: "123", organizationName: "Org" }).error, /at least 6 characters/i);
     assert.equal(auth.validateRegisterForm({ name: "User", email: "user@example.com", password: "secretPassword", organizationName: "Acme Corp" }).valid, true);
+
+    // 3. validateRenameWorkspaceForm
+    assert.equal(auth.validateRenameWorkspaceForm({ name: "" }).valid, false);
+    assert.match(auth.validateRenameWorkspaceForm({ name: "" }).error, /name is required/i);
+    assert.match(auth.validateRenameWorkspaceForm({ name: "   " }).error, /name is required/i);
+    assert.match(auth.validateRenameWorkspaceForm({ name: "A" }).error, /between 2 and 100/i);
+    assert.match(auth.validateRenameWorkspaceForm({ name: "A".repeat(101) }).error, /between 2 and 100/i);
+    assert.equal(auth.validateRenameWorkspaceForm({ name: "Acme Production" }).valid, true);
+    assert.equal(auth.validateRenameWorkspaceForm({ name: "  Trimmed Org  " }).valid, true);
+    assert.equal(auth.validateRenameWorkspaceForm({ name: "  Trimmed Org  " }).data.name, "Trimmed Org");
   });
 
   it("GET /js/dashboard.js should serve the dashboard controller with safe DOM & valid pure helpers", async () => {
@@ -892,6 +902,8 @@ describe("Frontend Static Serving & Security Boundaries", () => {
       assert.match(res.text, /id="workspace-role-badge"/, `workspace-role-badge missing in ${page}`);
       assert.match(res.text, /id="open-create-workspace-btn"/, `open-create-workspace-btn missing in ${page}`);
       assert.match(res.text, /id="create-workspace-modal"/, `create-workspace-modal missing in ${page}`);
+      assert.match(res.text, /id="open-rename-workspace-btn"/, `open-rename-workspace-btn missing in ${page}`);
+      assert.match(res.text, /id="rename-workspace-modal"/, `rename-workspace-modal missing in ${page}`);
       assert.match(res.text, /id="header-user-name"/, `header-user-name missing in ${page}`);
       assert.match(res.text, /id="header-user-role"/, `header-user-role missing in ${page}`);
       assert.match(res.text, /id="logout-btn"/, `logout-btn missing in ${page}`);

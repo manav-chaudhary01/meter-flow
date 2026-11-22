@@ -420,6 +420,9 @@
           roleBadgeEl.textContent = currentWorkspaceRole;
           roleBadgeEl.className = `badge badge-${currentWorkspaceRole === "owner" ? "primary" : currentWorkspaceRole === "admin" ? "info" : "neutral"}`;
         }
+        if (window.MeterFlowAuth && typeof window.MeterFlowAuth.updateWorkspaceRoleUI === "function") {
+          window.MeterFlowAuth.updateWorkspaceRoleUI(currentWorkspaceRole);
+        }
       }
     } catch (err) {
       showPageErrorBanner(`Failed to load workspaces: ${err.message || "Unknown error"}`);
@@ -446,6 +449,9 @@
           if (roleBadgeEl) {
             roleBadgeEl.textContent = currentWorkspaceRole;
             roleBadgeEl.className = `badge badge-${currentWorkspaceRole === "owner" ? "primary" : currentWorkspaceRole === "admin" ? "info" : "neutral"}`;
+          }
+          if (window.MeterFlowAuth && typeof window.MeterFlowAuth.updateWorkspaceRoleUI === "function") {
+            window.MeterFlowAuth.updateWorkspaceRoleUI(currentWorkspaceRole);
           }
 
           // Close open modals

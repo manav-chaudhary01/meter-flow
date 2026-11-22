@@ -200,12 +200,219 @@
     }
   }
 
+  function validateRenameWorkspaceForm(formData) {
+    const name = (formData?.name || "").trim();
+
+    if (!name) {
+      return { valid: false, error: "Workspace name is required.", fieldId: "rename-workspace-name" };
+    }
+    if (name.length < 2 || name.length > 100) {
+      return {
+        valid: false,
+        error: "Workspace name must be between 2 and 100 characters.",
+        fieldId: "rename-workspace-name"
+      };
+    }
+    return { valid: true, error: null, data: { name } };
+  }
+
+  let workspaceRenamedCallback = null;
+
+  function setWorkspaceRenamedCallback(cb) {
+    workspaceRenamedCallback = cb;
+  }
+
+  function updateWorkspaceRoleUI(role) {
+    const renameBtn = document.getElementById("open-rename-workspace-btn");
+    if (!renameBtn) return;
+    const normalizedRole = (role || "").toLowerCase();
+    if (normalizedRole === "member") {
+      renameBtn.disabled = true;
+      renameBtn.title = "Only workspace owners and admins can rename the workspace";
+      renameBtn.setAttribute("aria-disabled", "true");
+    } else {
+      renameBtn.disabled = false;
+      renameBtn.title = "Rename current workspace";
+      renameBtn.removeAttribute("aria-disabled");
+    }
+  }
+
+  function setupRenameWorkspaceModal(customCallback) {
+    if (customCallback) {
+      workspaceRenamedCallback = customCallback;
+    }
+
+    const modal = document.getElementById("rename-workspace-modal");
+    const openBtn = document.getElementById("open-rename-workspace-btn");
+    const form = document.getElementById("rename-workspace-form");
+    const submitBtn = document.getElementById("rename-workspace-submit-btn");
+    const errorEl = document.getElementById("rename-workspace-error");
+    const nameInput = document.getElementById("rename-workspace-name");
+    const selectEl = document.getElementById("workspace-select");
+
+    if (!modal || !openBtn || !form) return;
+
+    // Check initial role if role badge is already populated
+    const roleBadgeEl = document.getElementById("workspace-role-badge");
+    if (roleBadgeEl && roleBadgeEl.textContent) {
+      updateWorkspaceRoleUI(roleBadgeEl.textContent.trim());
+    }
+
+    function openModal() {
+      if (openBtn.disabled) return;
+      if (errorEl) {
+        errorEl.textContent = "";
+        errorEl.style.display = "none";
+      }
+      form.reset();
+
+      let currentName = "";
+      const apiClient = window.MeterFlowAPI || api;
+      const currentTenant = apiClient.getTenant ? apiClient.getTenant() : null;
+      if (currentTenant && currentTenant.name) {
+        currentName = currentTenant.name;
+      } else if (selectEl && selectEl.selectedOptions && selectEl.selectedOptions[0]) {
+        const optText = selectEl.selectedOptions[0].textContent || "";
+        currentName = optText.replace(/\s*\([^)]*\)$/, "").trim();
+      }
+
+      if (nameInput) {
+        nameInput.value = currentName;
+      }
+
+      modal.classList.add("open");
+      modal.setAttribute("aria-hidden", "false");
+      if (nameInput) {
+        setTimeout(() => {
+          nameInput.focus();
+          nameInput.select();
+        }, 50);
+      }
+    }
+
+    function closeModal() {
+      modal.classList.remove("open");
+      modal.setAttribute("aria-hidden", "true");
+      if (openBtn) openBtn.focus();
+    }
+
+    if (!openBtn.dataset.hasRenameListener) {
+      openBtn.dataset.hasRenameListener = "true";
+      openBtn.addEventListener("click", openModal);
+    }
+
+    modal.querySelectorAll("[data-close-modal='rename-workspace-modal']").forEach((btn) => {
+      if (!btn.dataset.hasCloseListener) {
+        btn.dataset.hasCloseListener = "true";
+        btn.addEventListener("click", closeModal);
+      }
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && modal.classList.contains("open")) {
+        closeModal();
+      }
+    });
+
+    if (!form.dataset.hasSubmitListener) {
+      form.dataset.hasSubmitListener = "true";
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        if (errorEl) {
+          errorEl.textContent = "";
+          errorEl.style.display = "none";
+        }
+
+        const name = nameInput ? nameInput.value.trim() : "";
+        const validation = validateRenameWorkspaceForm({ name });
+        if (!validation.valid) {
+          if (errorEl) {
+            errorEl.textContent = validation.error;
+            errorEl.style.display = "flex";
+          }
+          if (nameInput) nameInput.focus();
+          return;
+        }
+
+        const apiClient = window.MeterFlowAPI || api;
+        const currentTenant = apiClient.getTenant ? apiClient.getTenant() : null;
+        const workspaceId =
+          (selectEl && selectEl.value) ||
+          (currentTenant && (currentTenant.id || currentTenant._id));
+
+        if (!workspaceId) {
+          if (errorEl) {
+            errorEl.textContent = "Could not identify the active workspace ID.";
+            errorEl.style.display = "flex";
+          }
+          return;
+        }
+
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.textContent = "";
+          const spinner = document.createElement("span");
+          spinner.className = "btn-spinner";
+          submitBtn.appendChild(spinner);
+          submitBtn.appendChild(document.createTextNode(" Saving..."));
+        }
+
+        try {
+          const res = await apiClient.patch(`/api/workspaces/${workspaceId}`, { name });
+          if (!res.success || !res.data || !res.data.workspace) {
+            throw new Error(res.message || "Failed to rename workspace");
+          }
+
+          const updatedWorkspace = res.data.workspace;
+
+          // Update local session tenant object
+          const storedTenant = (apiClient.getTenant && apiClient.getTenant()) || {};
+          storedTenant.name = updatedWorkspace.name;
+          if (apiClient.setTenant) {
+            apiClient.setTenant(storedTenant);
+          }
+
+          // Update option text in workspace selector immediately
+          if (selectEl && selectEl.selectedOptions && selectEl.selectedOptions[0]) {
+            const opt = selectEl.selectedOptions[0];
+            opt.textContent = `${updatedWorkspace.name} (${updatedWorkspace.type || "organization"})`;
+          }
+
+          closeModal();
+
+          // Dispatch event so any page controller can update workspace name in page titles or headers
+          window.dispatchEvent(
+            new CustomEvent("workspace-renamed", { detail: { workspace: updatedWorkspace } })
+          );
+
+          if (typeof workspaceRenamedCallback === "function") {
+            await workspaceRenamedCallback(updatedWorkspace);
+          }
+        } catch (err) {
+          if (errorEl) {
+            errorEl.textContent = err.message || "Failed to rename workspace";
+            errorEl.style.display = "flex";
+          }
+        } finally {
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = "Save Changes";
+          }
+        }
+      });
+    }
+  }
+
   const auth = {
     validateLoginForm,
     validateRegisterForm,
     validateWorkspaceForm,
+    validateRenameWorkspaceForm,
     setWorkspaceCreatedCallback,
     setupCreateWorkspaceModal,
+    setWorkspaceRenamedCallback,
+    setupRenameWorkspaceModal,
+    updateWorkspaceRoleUI,
 
     // Check authentication for protected pages
     requireAuth() {
@@ -441,6 +648,9 @@
     }
     if (document.getElementById("create-workspace-modal")) {
       auth.setupCreateWorkspaceModal();
+    }
+    if (document.getElementById("rename-workspace-modal")) {
+      auth.setupRenameWorkspaceModal();
     }
   });
 })(window);

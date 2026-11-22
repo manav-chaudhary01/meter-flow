@@ -473,6 +473,9 @@
         normalizedRole === "owner" ? "primary" : normalizedRole === "admin" ? "info" : "neutral"
       }`;
     }
+    if (window.MeterFlowAuth && typeof window.MeterFlowAuth.updateWorkspaceRoleUI === "function") {
+      window.MeterFlowAuth.updateWorkspaceRoleUI(role);
+    }
 
     const canManage = canManageBudgets(role);
     if (openCreateBtn) {

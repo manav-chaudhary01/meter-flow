@@ -255,6 +255,10 @@
         inviteBtn.removeAttribute("aria-disabled");
       }
     }
+
+    if (window.MeterFlowAuth && typeof window.MeterFlowAuth.updateWorkspaceRoleUI === "function") {
+      window.MeterFlowAuth.updateWorkspaceRoleUI(role);
+    }
   }
 
   async function loadWorkspaces() {

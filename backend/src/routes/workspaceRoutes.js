@@ -3,6 +3,7 @@ import {
   listWorkspaces,
   createWorkspace,
   switchWorkspace,
+  renameWorkspace,
   getWorkspaceMembers,
   addWorkspaceMember,
   removeWorkspaceMember
@@ -16,6 +17,7 @@ router.use(authenticateToken);
 router.get("/", listWorkspaces);
 router.post("/", createWorkspace);
 router.post("/switch", switchWorkspace);
+router.patch("/:id", renameWorkspace);
 router.get("/:id/members", getWorkspaceMembers);
 router.post("/:id/members", addWorkspaceMember);
 router.delete("/:id/members/:memberUserId", removeWorkspaceMember);

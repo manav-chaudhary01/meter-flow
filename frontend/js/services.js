@@ -416,6 +416,9 @@
       roleBadgeEl.textContent = role;
       roleBadgeEl.className = `badge badge-${role === "owner" ? "primary" : role === "admin" ? "info" : "neutral"}`;
     }
+    if (window.MeterFlowAuth && typeof window.MeterFlowAuth.updateWorkspaceRoleUI === "function") {
+      window.MeterFlowAuth.updateWorkspaceRoleUI(role);
+    }
 
     const canManage = canManageWorkspace(role);
     if (openCreateBtn) {

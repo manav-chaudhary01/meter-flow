@@ -196,6 +196,87 @@ export async function switchWorkspace(req, res) {
   }
 }
 
+export async function renameWorkspace(req, res) {
+  try {
+    const { id: workspaceId } = req.params;
+    const { name } = req.body;
+
+    if (!workspaceId || !mongoose.Types.ObjectId.isValid(workspaceId)) {
+      return res.status(400).json({
+        success: false,
+        message: "A valid workspace ID is required"
+      });
+    }
+
+    if (name === undefined || name === null || typeof name !== "string") {
+      return res.status(400).json({
+        success: false,
+        message: "Workspace name is required and must be a string"
+      });
+    }
+
+    const normalizedName = name.trim();
+    if (normalizedName.length < 2 || normalizedName.length > 100) {
+      return res.status(400).json({
+        success: false,
+        message: "Workspace name must be between 2 and 100 characters"
+      });
+    }
+
+    // Verify caller has active membership in this workspace with role 'owner' or 'admin'
+    const membership = await Membership.findOne({
+      userId: req.user.userId,
+      tenantId: workspaceId,
+      status: "active"
+    });
+
+    if (!membership) {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied: you are not an active member of this workspace"
+      });
+    }
+
+    if (!["owner", "admin"].includes(membership.role)) {
+      return res.status(403).json({
+        success: false,
+        message: "Forbidden: only workspace owners and admins can rename the workspace"
+      });
+    }
+
+    const workspace = await Tenant.findById(workspaceId);
+    if (!workspace) {
+      return res.status(404).json({
+        success: false,
+        message: "Workspace not found"
+      });
+    }
+
+    // Update name only; preserve _id, type, createdBy, timestamps, etc.
+    workspace.name = normalizedName;
+    await workspace.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Workspace renamed successfully",
+      data: {
+        workspace: {
+          id: workspace._id,
+          name: workspace.name,
+          type: workspace.type || "organization",
+          role: membership.role
+        }
+      }
+    });
+  } catch (error) {
+    console.error("Rename workspace error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to rename workspace"
+    });
+  }
+}
+
 export async function getWorkspaceMembers(req, res) {
   try {
     const { id: workspaceId } = req.params;
