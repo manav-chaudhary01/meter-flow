@@ -801,6 +801,11 @@ describe("Frontend Static Serving & Security Boundaries", () => {
     assert.match(res.text, /id="archive-workspace-modal"/);
     assert.match(res.text, /id="archive-workspace-confirm-btn"/);
     assert.match(res.text, /Active access to this workspace will be disabled for all members/);
+    assert.match(res.text, /id="open-transfer-ownership-btn"/);
+    assert.match(res.text, /id="transfer-ownership-modal"/);
+    assert.match(res.text, /id="transfer-ownership-confirm-btn"/);
+    assert.match(res.text, /id="transfer-ownership-target"/);
+    assert.match(res.text, /Transfer Workspace Ownership/);
   });
 
   it("GET /js/team.js should serve the team controller with safe DOM & valid pure helpers", async () => {
@@ -922,6 +927,20 @@ describe("Frontend Static Serving & Security Boundaries", () => {
     assert.equal(helpers.canArchiveWorkspace("member"), false);
     assert.equal(helpers.canArchiveWorkspace(""), false);
     assert.equal(helpers.canArchiveWorkspace(null), false);
+
+    // 4d. canTransferOwnership (role)
+    assert.equal(helpers.canTransferOwnership("owner"), true);
+    assert.equal(helpers.canTransferOwnership("admin"), false);
+    assert.equal(helpers.canTransferOwnership("member"), false);
+    assert.equal(helpers.canTransferOwnership(""), false);
+    assert.equal(helpers.canTransferOwnership(null), false);
+
+    // 4e. isMemberEligibleForOwnershipTransfer (member, currentUserId)
+    assert.equal(helpers.isMemberEligibleForOwnershipTransfer({ userId: "u2", role: "admin", status: "active" }, "u1"), true);
+    assert.equal(helpers.isMemberEligibleForOwnershipTransfer({ userId: "u2", role: "member", status: "active" }, "u1"), true);
+    assert.equal(helpers.isMemberEligibleForOwnershipTransfer({ userId: "u1", role: "admin", status: "active" }, "u1"), false); // self
+    assert.equal(helpers.isMemberEligibleForOwnershipTransfer({ userId: "u2", role: "owner", status: "active" }, "u1"), false); // already owner
+    assert.equal(helpers.isMemberEligibleForOwnershipTransfer({ userId: "u2", role: "member", status: "suspended" }, "u1"), false); // suspended
 
     // 5. formatMemberRole
     assert.equal(helpers.formatMemberRole("owner").label, "Owner");

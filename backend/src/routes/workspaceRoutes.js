@@ -10,7 +10,8 @@ import {
   modifyWorkspaceMemberRole,
   modifyWorkspaceMemberStatus,
   leaveWorkspace,
-  archiveWorkspace
+  archiveWorkspace,
+  transferOwnership
 } from "../controllers/workspaceController.js";
 import { authenticateToken } from "../middleware/authMiddleware.js";
 
@@ -24,6 +25,7 @@ router.post("/switch", switchWorkspace);
 router.patch("/:id", renameWorkspace);
 router.patch("/:id/archive", archiveWorkspace);
 router.post("/:id/leave", leaveWorkspace);
+router.post("/:id/transfer-ownership", transferOwnership);
 router.get("/:id/members", getWorkspaceMembers);
 router.post("/:id/members", addWorkspaceMember);
 router.patch("/:id/members/:memberUserId/role", modifyWorkspaceMemberRole);

@@ -788,6 +788,180 @@ export async function withUserLock(userId, fn) {
   }
 }
 
+// In-process concurrency mutex for workspace-level critical sections (e.g. transfer-ownership)
+const workspaceLocks = new Map();
+
+export async function withWorkspaceLock(workspaceId, fn) {
+  const key = workspaceId.toString();
+  while (workspaceLocks.has(key)) {
+    await workspaceLocks.get(key);
+  }
+  let resolve;
+  const promise = new Promise((r) => {
+    resolve = r;
+  });
+  workspaceLocks.set(key, promise);
+  try {
+    return await fn();
+  } finally {
+    workspaceLocks.delete(key);
+    resolve();
+  }
+}
+
+/**
+ * Transfer workspace ownership to an active member.
+ * Post-condition:
+ * - Current owner becomes an active admin
+ * - Target member becomes the active owner
+ * - Invariant: Exactly one active owner per workspace
+ */
+export async function transferOwnership(req, res) {
+  try {
+    const { id: workspaceId } = req.params;
+    const { memberUserId } = req.body || {};
+
+    if (!workspaceId || !mongoose.Types.ObjectId.isValid(workspaceId)) {
+      return res.status(400).json({
+        success: false,
+        message: "A valid workspace ID is required"
+      });
+    }
+
+    if (!memberUserId || !mongoose.Types.ObjectId.isValid(memberUserId)) {
+      return res.status(400).json({
+        success: false,
+        message: "A valid target member user ID is required"
+      });
+    }
+
+    const callerUserId = req.user.userId;
+
+    // Self-transfer is disallowed
+    if (callerUserId.toString() === memberUserId.toString()) {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot transfer ownership to yourself"
+      });
+    }
+
+    return await withWorkspaceLock(workspaceId, async () => {
+      // 1. Verify workspace exists and is not archived
+      const workspace = await Tenant.findById(workspaceId);
+      if (!workspace) {
+        return res.status(404).json({
+          success: false,
+          message: "Workspace not found"
+        });
+      }
+
+      if (workspace.status === "archived") {
+        return res.status(403).json({
+          success: false,
+          message: "Access denied: workspace is archived or inactive"
+        });
+      }
+
+      // 2. Verify caller's membership and owner role in this workspace
+      const callerMembership = await Membership.findOne({
+        userId: callerUserId,
+        tenantId: workspaceId
+      });
+
+      if (!callerMembership) {
+        return res.status(403).json({
+          success: false,
+          message: "Access denied: you are not a member of this workspace"
+        });
+      }
+
+      if (callerMembership.status !== "active") {
+        return res.status(403).json({
+          success: false,
+          message: "Access denied: your workspace membership is suspended or inactive"
+        });
+      }
+
+      if (callerMembership.role !== "owner") {
+        return res.status(403).json({
+          success: false,
+          message: "Forbidden: only the workspace owner can transfer ownership"
+        });
+      }
+
+      // 3. Verify target member existence in this workspace
+      const targetMembership = await Membership.findOne({
+        userId: memberUserId,
+        tenantId: workspaceId
+      });
+
+      if (!targetMembership) {
+        return res.status(404).json({
+          success: false,
+          message: "Target member not found in this workspace"
+        });
+      }
+
+      if (targetMembership.status !== "active") {
+        return res.status(400).json({
+          success: false,
+          message: "Cannot transfer ownership to a suspended or inactive member"
+        });
+      }
+
+      if (targetMembership.role === "owner") {
+        return res.status(400).json({
+          success: false,
+          message: "Target member is already the owner of this workspace"
+        });
+      }
+
+      // 4. Atomic role transition:
+      // Current owner becomes admin
+      callerMembership.role = "admin";
+      await callerMembership.save();
+
+      // Target member becomes owner
+      targetMembership.role = "owner";
+      await targetMembership.save();
+
+      const [callerUser, targetUser] = await Promise.all([
+        User.findById(callerUserId),
+        User.findById(memberUserId)
+      ]);
+
+      return res.status(200).json({
+        success: true,
+        message: "Workspace ownership transferred successfully",
+        data: {
+          workspace: {
+            id: workspace._id,
+            name: workspace.name
+          },
+          previousOwner: {
+            userId: callerMembership.userId,
+            name: callerUser ? callerUser.name : "",
+            email: callerUser ? callerUser.email : "",
+            role: callerMembership.role
+          },
+          newOwner: {
+            userId: targetMembership.userId,
+            name: targetUser ? targetUser.name : "",
+            email: targetUser ? targetUser.email : "",
+            role: targetMembership.role
+          }
+        }
+      });
+    });
+  } catch (error) {
+    console.error("Transfer workspace ownership error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to transfer workspace ownership"
+    });
+  }
+}
+
 export async function leaveWorkspace(req, res) {
   try {
     const { id: workspaceId } = req.params;

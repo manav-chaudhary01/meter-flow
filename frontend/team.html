@@ -126,6 +126,9 @@
             <button id="open-invite-modal-btn" class="btn btn-primary" aria-label="Add existing team member">
               + Add Member
             </button>
+            <button type="button" id="open-transfer-ownership-btn" class="btn btn-secondary" style="display: none;" aria-label="Transfer workspace ownership">
+              Transfer Ownership
+            </button>
             <button type="button" id="open-leave-workspace-btn" class="btn btn-secondary" style="color: var(--color-danger); border-color: var(--color-danger); display: none;" aria-label="Leave current workspace">
               Leave Workspace
             </button>
@@ -353,6 +356,41 @@
         <button type="button" class="btn btn-secondary" data-close-modal="remove-member-modal">Cancel</button>
         <button type="button" id="remove-member-confirm-btn" class="btn btn-danger">Remove Member</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Transfer Ownership Confirmation Modal -->
+  <div id="transfer-ownership-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="transfer-ownership-title">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 id="transfer-ownership-title">Transfer Workspace Ownership</h3>
+        <button type="button" class="modal-close-btn" data-close-modal="transfer-ownership-modal" aria-label="Close dialog">&times;</button>
+      </div>
+      <form id="transfer-ownership-form" novalidate>
+        <div class="modal-body">
+          <div id="transfer-ownership-error" class="alert alert-error" style="display: none;" role="alert"></div>
+
+          <div class="alert alert-warning" style="margin-bottom: var(--space-md);">
+            <strong>Warning:</strong> Ownership transfer is permanent. You will become an Admin in this workspace.
+          </div>
+
+          <p style="margin-bottom: var(--space-md);">
+            Select an active team member to become the new workspace owner. Exactly one active owner is permitted per workspace.
+          </p>
+
+          <div class="form-group">
+            <label for="transfer-ownership-target" class="form-label">New Owner *</label>
+            <select id="transfer-ownership-target" class="form-select" required aria-label="Select eligible member to transfer ownership to">
+              <option value="">Select an active team member...</option>
+            </select>
+            <span class="form-hint">Only active members are eligible. Suspended members and the current owner cannot be selected.</span>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-close-modal="transfer-ownership-modal">Cancel</button>
+          <button type="submit" id="transfer-ownership-confirm-btn" class="btn btn-danger">Confirm Transfer</button>
+        </div>
+      </form>
     </div>
   </div>
 

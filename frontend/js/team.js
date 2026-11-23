@@ -154,6 +154,21 @@
     return normalized === "owner";
   }
 
+  function canTransferOwnership(role) {
+    if (!role || typeof role !== "string") return false;
+    return role.trim().toLowerCase() === "owner";
+  }
+
+  function isMemberEligibleForOwnershipTransfer(member, currentUserId) {
+    if (!member) return false;
+    const targetId = member.userId || member._id || member.id;
+    if (!targetId) return false;
+    if (currentUserId && String(targetId) === String(currentUserId)) return false;
+    if (member.role === "owner") return false;
+    if (member.status !== "active") return false;
+    return true;
+  }
+
   function getInitials(name) {
     if (!name || typeof name !== "string") return "U";
     return name
@@ -324,6 +339,15 @@
         inviteBtn.disabled = false;
         inviteBtn.title = "Add an existing user to this workspace";
         inviteBtn.removeAttribute("aria-disabled");
+      }
+    }
+
+    const transferBtn = document.getElementById("open-transfer-ownership-btn");
+    if (transferBtn) {
+      if (canTransferOwnership(role) && !isPersonal) {
+        transferBtn.style.display = "inline-flex";
+      } else {
+        transferBtn.style.display = "none";
       }
     }
 
@@ -668,6 +692,19 @@
         actionsWrapper.appendChild(removeBtn);
       }
 
+      // Transfer Ownership action: Allow owner to initiate ownership transfer to an active non-owner member
+      if (canTransferOwnership(currentWorkspaceRole) && isMemberEligibleForOwnershipTransfer(member, currentUserId)) {
+        const transferOwnerBtn = document.createElement("button");
+        transferOwnerBtn.type = "button";
+        transferOwnerBtn.className = "btn btn-secondary btn-sm action-transfer-owner";
+        transferOwnerBtn.textContent = "Make Owner";
+        transferOwnerBtn.setAttribute("aria-label", `Transfer workspace ownership to ${member.name || member.email}`);
+        transferOwnerBtn.addEventListener("click", () => {
+          openTransferOwnershipModal(member.userId);
+        });
+        actionsWrapper.appendChild(transferOwnerBtn);
+      }
+
       // Self-leave action: Allow non-owner to initiate voluntary self-leave from their row
       if (isSelf && canLeaveWorkspace(currentWorkspaceRole)) {
         const leaveRowBtn = document.createElement("button");
@@ -738,6 +775,48 @@
     } catch (err) {
       showPageErrorBanner(`Could not load team members: ${err.message || "Unknown error"}`);
     }
+  }
+
+  function populateTransferOwnershipDropdown(preselectedUserId = null) {
+    const select = document.getElementById("transfer-ownership-target");
+    if (!select) return;
+    clearElement(select);
+
+    const apiClient = window.MeterFlowAPI || api;
+    const currentUser = apiClient && typeof apiClient.getUser === "function" ? apiClient.getUser() : null;
+    const currentUserId = currentUser ? String(currentUser.id || currentUser.userId || "") : "";
+
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = "Select an active team member...";
+    select.appendChild(placeholder);
+
+    const eligibleMembers = (membersList || []).filter((m) =>
+      isMemberEligibleForOwnershipTransfer(m, currentUserId)
+    );
+
+    eligibleMembers.forEach((m) => {
+      const opt = document.createElement("option");
+      opt.value = m.userId;
+      const roleCapitalized = (m.role || "member").charAt(0).toUpperCase() + (m.role || "member").slice(1);
+      opt.textContent = `${m.name || "Member"} (${m.email || ""}) — ${roleCapitalized}`;
+      if (preselectedUserId && String(m.userId) === String(preselectedUserId)) {
+        opt.selected = true;
+      }
+      select.appendChild(opt);
+    });
+  }
+
+  function openTransferOwnershipModal(preselectedUserId = null) {
+    const errorEl = document.getElementById("transfer-ownership-error");
+    if (errorEl) {
+      errorEl.textContent = "";
+      errorEl.style.display = "none";
+    }
+
+    populateTransferOwnershipDropdown(preselectedUserId);
+    const targetSelect = document.getElementById("transfer-ownership-target");
+    openModal("transfer-ownership-modal", targetSelect);
   }
 
   function setupModals() {
@@ -1042,7 +1121,86 @@
       });
     }
 
-    // 7. Refresh Team Button
+    // 7. Transfer Ownership Modal
+    const openTransferBtn = document.getElementById("open-transfer-ownership-btn");
+    const transferForm = document.getElementById("transfer-ownership-form");
+    const transferConfirmBtn = document.getElementById("transfer-ownership-confirm-btn");
+    const transferError = document.getElementById("transfer-ownership-error");
+    const transferTargetSelect = document.getElementById("transfer-ownership-target");
+
+    if (openTransferBtn && !openTransferBtn.dataset.hasOpenListener) {
+      openTransferBtn.dataset.hasOpenListener = "true";
+      openTransferBtn.addEventListener("click", () => {
+        openTransferOwnershipModal();
+      });
+    }
+
+    if (transferForm && !transferForm.dataset.hasSubmitListener) {
+      transferForm.dataset.hasSubmitListener = "true";
+      transferForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        if (transferConfirmBtn.disabled || !currentWorkspaceId) return;
+
+        if (transferError) {
+          transferError.textContent = "";
+          transferError.style.display = "none";
+        }
+
+        const targetUserId = transferTargetSelect ? transferTargetSelect.value : "";
+        if (!targetUserId) {
+          if (transferError) {
+            transferError.textContent = "Please select an eligible active team member to become the new owner.";
+            transferError.style.display = "block";
+          }
+          return;
+        }
+
+        transferConfirmBtn.disabled = true;
+        transferConfirmBtn.textContent = "";
+        const spinner = document.createElement("span");
+        spinner.className = "btn-spinner";
+        transferConfirmBtn.appendChild(spinner);
+        transferConfirmBtn.appendChild(document.createTextNode(" Transferring..."));
+
+        try {
+          const apiClient = window.MeterFlowAPI || api;
+          const res = await apiClient.post(`/api/workspaces/${currentWorkspaceId}/transfer-ownership`, {
+            memberUserId: targetUserId
+          });
+
+          if (!res.success) {
+            throw new Error(res.message || "Failed to transfer workspace ownership");
+          }
+
+          // Update caller's role to admin in local session
+          currentWorkspaceRole = "admin";
+          const tenant = apiClient.getTenant();
+          if (tenant) {
+            tenant.role = "admin";
+            apiClient.setTenant(tenant);
+          }
+          applyRolePermissions("admin", currentWorkspaceType);
+
+          closeModal("transfer-ownership-modal");
+          showPageSuccessBanner(
+            "Workspace ownership has been successfully transferred. You are now an Admin in this workspace."
+          );
+
+          await loadWorkspaces();
+          await loadMembers();
+        } catch (err) {
+          if (transferError) {
+            transferError.textContent = err.message || "Failed to transfer workspace ownership";
+            transferError.style.display = "block";
+          }
+        } finally {
+          transferConfirmBtn.disabled = false;
+          transferConfirmBtn.textContent = "Confirm Transfer";
+        }
+      });
+    }
+
+    // 8. Refresh Team Button
     const refreshBtn = document.getElementById("refresh-team-btn");
     if (refreshBtn && !refreshBtn.dataset.hasRefreshListener) {
       refreshBtn.dataset.hasRefreshListener = "true";
@@ -1088,6 +1246,8 @@
     canRemoveMember,
     canLeaveWorkspace,
     canArchiveWorkspace,
+    canTransferOwnership,
+    isMemberEligibleForOwnershipTransfer,
     formatMemberRole,
     formatMemberStatus,
     getInitials,
