@@ -13,6 +13,11 @@ import {
   archiveWorkspace,
   transferOwnership
 } from "../controllers/workspaceController.js";
+import {
+  createWorkspaceInvitation,
+  listWorkspaceInvitations,
+  cancelWorkspaceInvitation
+} from "../controllers/invitationController.js";
 import { authenticateToken } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
@@ -31,5 +36,10 @@ router.post("/:id/members", addWorkspaceMember);
 router.patch("/:id/members/:memberUserId/role", modifyWorkspaceMemberRole);
 router.patch("/:id/members/:memberUserId/status", modifyWorkspaceMemberStatus);
 router.delete("/:id/members/:memberUserId", removeWorkspaceMember);
+
+// Workspace Invitations (P3.3)
+router.post("/:id/invitations", createWorkspaceInvitation);
+router.get("/:id/invitations", listWorkspaceInvitations);
+router.patch("/:id/invitations/:invitationId/cancel", cancelWorkspaceInvitation);
 
 export default router;

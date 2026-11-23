@@ -159,6 +159,12 @@
     return role.trim().toLowerCase() === "owner";
   }
 
+  function canManageInvitations(role) {
+    if (!role || typeof role !== "string") return false;
+    const normalized = role.trim().toLowerCase();
+    return normalized === "owner" || normalized === "admin";
+  }
+
   function isMemberEligibleForOwnershipTransfer(member, currentUserId) {
     if (!member) return false;
     const targetId = member.userId || member._id || member.id;
@@ -202,6 +208,8 @@
   let currentWorkspaceType = "organization";
   let membersList = [];
   let pendingRemoveMember = null;
+  let invitationsList = [];
+  let pendingCancelInvitation = null;
 
   function clearElement(element) {
     if (!element) return;
@@ -333,12 +341,21 @@
         inviteBtn.setAttribute("aria-disabled", "true");
       } else if (!canManageTeam(role)) {
         inviteBtn.disabled = true;
-        inviteBtn.title = "Only workspace owners and admins can add members";
+        inviteBtn.title = "Only workspace owners and admins can invite members";
         inviteBtn.setAttribute("aria-disabled", "true");
       } else {
         inviteBtn.disabled = false;
-        inviteBtn.title = "Add an existing user to this workspace";
+        inviteBtn.title = "Invite a new member to this workspace";
         inviteBtn.removeAttribute("aria-disabled");
+      }
+    }
+
+    const invitationsCard = document.getElementById("pending-invitations-card");
+    if (invitationsCard) {
+      if (canManageInvitations(role) && !isPersonal) {
+        invitationsCard.style.display = "block";
+      } else {
+        invitationsCard.style.display = "none";
       }
     }
 
@@ -447,7 +464,7 @@
             clearElement(tbody);
             membersList = [];
 
-            await loadMembers();
+            await Promise.all([loadMembers(), loadInvitations()]);
           }
         } catch (switchErr) {
           selectEl.value = currentWorkspaceId;
@@ -777,6 +794,120 @@
     }
   }
 
+  async function loadInvitations() {
+    const cardEl = document.getElementById("pending-invitations-card");
+    if (!currentWorkspaceId) return;
+
+    if (!canManageInvitations(currentWorkspaceRole) || currentWorkspaceType === "personal") {
+      if (cardEl) cardEl.style.display = "none";
+      return;
+    }
+
+    if (cardEl) cardEl.style.display = "block";
+
+    const apiClient = window.MeterFlowAPI || api;
+    try {
+      const res = await apiClient.get(`/api/workspaces/${currentWorkspaceId}/invitations?status=pending`);
+      if (res.success && res.data && Array.isArray(res.data.invitations)) {
+        invitationsList = res.data.invitations;
+        renderInvitationsTable(invitationsList);
+      }
+    } catch {
+      renderInvitationsTable([]);
+    }
+  }
+
+  function renderInvitationsTable(invitations) {
+    const tbody = document.getElementById("invitations-table-body");
+    const emptyState = document.getElementById("invitations-empty-state");
+    const countBadge = document.getElementById("invitations-count-badge");
+
+    if (!tbody) return;
+    clearElement(tbody);
+
+    const count = Array.isArray(invitations) ? invitations.length : 0;
+    if (countBadge) countBadge.textContent = `${count} pending`;
+
+    if (!Array.isArray(invitations) || invitations.length === 0) {
+      if (emptyState) emptyState.style.display = "block";
+      return;
+    }
+
+    if (emptyState) emptyState.style.display = "none";
+
+    invitations.forEach((inv) => {
+      const tr = document.createElement("tr");
+
+      // Column 1: Invitee Email
+      const tdEmail = document.createElement("td");
+      tdEmail.textContent = inv.email || "—";
+
+      // Column 2: Role
+      const tdRole = document.createElement("td");
+      const roleBadge = document.createElement("span");
+      roleBadge.className = inv.role === "admin" ? "badge badge-info" : "badge badge-neutral";
+      roleBadge.textContent = (inv.role || "member").toUpperCase();
+      tdRole.appendChild(roleBadge);
+
+      // Column 3: Status
+      const tdStatus = document.createElement("td");
+      const statusBadge = document.createElement("span");
+      statusBadge.className = "badge badge-warning";
+      statusBadge.textContent = "Pending";
+      tdStatus.appendChild(statusBadge);
+
+      // Column 4: Invited By
+      const tdInvitedBy = document.createElement("td");
+      tdInvitedBy.textContent = inv.invitedBy?.name || inv.invitedBy?.email || "Admin";
+
+      // Column 5: Expires
+      const tdExpires = document.createElement("td");
+      tdExpires.textContent = formatDate(inv.expiresAt);
+
+      // Column 6: Actions
+      const tdActions = document.createElement("td");
+      tdActions.style.textAlign = "right";
+
+      const cancelBtn = document.createElement("button");
+      cancelBtn.type = "button";
+      cancelBtn.className = "btn btn-secondary btn-sm";
+      cancelBtn.style.color = "var(--color-danger)";
+      cancelBtn.style.borderColor = "var(--color-danger)";
+      cancelBtn.textContent = "Cancel";
+      cancelBtn.setAttribute("aria-label", `Cancel invitation for ${inv.email}`);
+
+      cancelBtn.addEventListener("click", () => {
+        openCancelInvitationModal(inv);
+      });
+
+      tdActions.appendChild(cancelBtn);
+
+      tr.appendChild(tdEmail);
+      tr.appendChild(tdRole);
+      tr.appendChild(tdStatus);
+      tr.appendChild(tdInvitedBy);
+      tr.appendChild(tdExpires);
+      tr.appendChild(tdActions);
+
+      tbody.appendChild(tr);
+    });
+  }
+
+  function openCancelInvitationModal(invitation) {
+    pendingCancelInvitation = invitation;
+    const emailEl = document.getElementById("cancel-invitation-email");
+    const errorEl = document.getElementById("cancel-invitation-error");
+
+    if (emailEl) emailEl.textContent = invitation.email || "this email";
+    if (errorEl) {
+      errorEl.textContent = "";
+      errorEl.style.display = "none";
+    }
+
+    const confirmBtn = document.getElementById("cancel-invitation-confirm-btn");
+    openModal("cancel-invitation-modal", confirmBtn);
+  }
+
   function populateTransferOwnershipDropdown(preselectedUserId = null) {
     const select = document.getElementById("transfer-ownership-target");
     if (!select) return;
@@ -882,33 +1013,82 @@
           const spinner = document.createElement("span");
           spinner.className = "btn-spinner";
           inviteSubmitBtn.appendChild(spinner);
-          inviteSubmitBtn.appendChild(document.createTextNode(" Adding..."));
+          inviteSubmitBtn.appendChild(document.createTextNode(" Sending..."));
         }
 
         try {
           const apiClient = window.MeterFlowAPI || api;
-          const res = await apiClient.post(`/api/workspaces/${currentWorkspaceId}/members`, {
+          const res = await apiClient.post(`/api/workspaces/${currentWorkspaceId}/invitations`, {
             email,
             role
           });
 
           if (!res.success) {
-            throw new Error(res.message || "Failed to add member");
+            throw new Error(res.message || "Failed to send invitation");
           }
 
           closeModal("invite-member-modal", openInviteBtn);
-          showPageSuccessBanner(`Successfully added ${email} as ${role}.`);
-          await loadMembers();
+          const inviteUrl = res.data?.invitationUrl;
+          if (inviteUrl) {
+            showPageSuccessBanner(`Successfully created invitation for ${email}. Link: ${window.location.origin}${inviteUrl}`);
+          } else {
+            showPageSuccessBanner(`Successfully sent invitation to ${email} as ${role}.`);
+          }
+          await Promise.all([loadMembers(), loadInvitations()]);
         } catch (err) {
           if (inviteError) {
-            inviteError.textContent = err.message || "Failed to add member";
+            inviteError.textContent = err.message || "Failed to send invitation";
             inviteError.style.display = "flex";
           }
         } finally {
           if (inviteSubmitBtn) {
             inviteSubmitBtn.disabled = false;
-            inviteSubmitBtn.textContent = "Add Member";
+            inviteSubmitBtn.textContent = "Send Invitation";
           }
+        }
+      });
+    }
+
+    // 4. Handle Cancel Invitation Confirm (P3.3)
+    const cancelConfirmBtn = document.getElementById("cancel-invitation-confirm-btn");
+    const cancelError = document.getElementById("cancel-invitation-error");
+
+    if (cancelConfirmBtn && !cancelConfirmBtn.dataset.hasCancelListener) {
+      cancelConfirmBtn.dataset.hasCancelListener = "true";
+      cancelConfirmBtn.addEventListener("click", async () => {
+        if (!pendingCancelInvitation || !currentWorkspaceId) return;
+
+        if (cancelError) {
+          cancelError.textContent = "";
+          cancelError.style.display = "none";
+        }
+
+        cancelConfirmBtn.disabled = true;
+        cancelConfirmBtn.textContent = "Cancelling...";
+
+        try {
+          const apiClient = window.MeterFlowAPI || api;
+          const res = await apiClient.patch(
+            `/api/workspaces/${currentWorkspaceId}/invitations/${pendingCancelInvitation.id}/cancel`
+          );
+
+          if (!res.success) {
+            throw new Error(res.message || "Failed to cancel invitation");
+          }
+
+          const cancelledEmail = pendingCancelInvitation.email;
+          closeModal("cancel-invitation-modal");
+          pendingCancelInvitation = null;
+          showPageSuccessBanner(`Cancelled invitation for ${cancelledEmail}.`);
+          await loadInvitations();
+        } catch (err) {
+          if (cancelError) {
+            cancelError.textContent = err.message || "Failed to cancel invitation";
+            cancelError.style.display = "flex";
+          }
+        } finally {
+          cancelConfirmBtn.disabled = false;
+          cancelConfirmBtn.textContent = "Cancel Invitation";
         }
       });
     }
@@ -1206,7 +1386,7 @@
       refreshBtn.dataset.hasRefreshListener = "true";
       refreshBtn.addEventListener("click", async () => {
         refreshBtn.disabled = true;
-        await loadMembers();
+        await Promise.all([loadMembers(), loadInvitations()]);
         refreshBtn.disabled = false;
       });
     }
@@ -1226,12 +1406,12 @@
     if (authClient && typeof authClient.setWorkspaceCreatedCallback === "function") {
       authClient.setWorkspaceCreatedCallback(async () => {
         await loadWorkspaces();
-        await loadMembers();
+        await Promise.all([loadMembers(), loadInvitations()]);
       });
     }
 
     await loadWorkspaces();
-    await loadMembers();
+    await Promise.all([loadMembers(), loadInvitations()]);
   }
 
   // Export module helpers to window for isolated VM testing & controller execution
@@ -1241,6 +1421,7 @@
     validateModifyRole,
     validateModifyStatus,
     canManageTeam,
+    canManageInvitations,
     canModifyMemberRole,
     canModifyMemberStatus,
     canRemoveMember,
@@ -1253,7 +1434,9 @@
     getInitials,
     formatDate,
     initTeamPage,
-    renderMembersTable
+    renderMembersTable,
+    renderInvitationsTable,
+    loadInvitations
   };
 
   // Auto-initialize when loaded on team.html

@@ -785,9 +785,10 @@ describe("Frontend Static Serving & Security Boundaries", () => {
     assert.match(res.text, /id="team-table"/);
     assert.match(res.text, /<th scope="col">Status<\/th>/);
     assert.match(res.text, /id="open-invite-modal-btn"/);
-    assert.match(res.text, /\+ Add Member/);
-    assert.match(res.text, /Add Workspace Member/);
-    assert.match(res.text, /Enter the email address of an existing MeterFlow user/);
+    assert.match(res.text, /\+ Invite Member/);
+    assert.match(res.text, /Invite Workspace Member/);
+    assert.match(res.text, /id="pending-invitations-card"/);
+    assert.match(res.text, /id="cancel-invitation-modal"/);
     assert.match(res.text, /id="invite-member-modal"/);
     assert.match(res.text, /id="remove-member-modal"/);
     assert.match(res.text, /id="create-workspace-modal"/);
@@ -942,6 +943,13 @@ describe("Frontend Static Serving & Security Boundaries", () => {
     assert.equal(helpers.isMemberEligibleForOwnershipTransfer({ userId: "u2", role: "owner", status: "active" }, "u1"), false); // already owner
     assert.equal(helpers.isMemberEligibleForOwnershipTransfer({ userId: "u2", role: "member", status: "suspended" }, "u1"), false); // suspended
 
+    // 4f. canManageInvitations (role)
+    assert.equal(helpers.canManageInvitations("owner"), true);
+    assert.equal(helpers.canManageInvitations("admin"), true);
+    assert.equal(helpers.canManageInvitations("member"), false);
+    assert.equal(helpers.canManageInvitations(""), false);
+    assert.equal(helpers.canManageInvitations(null), false);
+
     // 5. formatMemberRole
     assert.equal(helpers.formatMemberRole("owner").label, "Owner");
     assert.match(helpers.formatMemberRole("owner").className, /badge-primary/);
@@ -965,7 +973,7 @@ describe("Frontend Static Serving & Security Boundaries", () => {
   });
 
   it("GET new JavaScript controller modules should return application/javascript", async () => {
-    const jsFiles = ["services.js", "usage.js", "billing.js", "budgets.js", "team.js"];
+    const jsFiles = ["services.js", "usage.js", "billing.js", "budgets.js", "team.js", "accept-invite.js"];
     for (const file of jsFiles) {
       const res = await request(app).get(`/js/${file}`);
       assert.equal(res.status, 200, `Failed for /js/${file}`);
@@ -974,7 +982,7 @@ describe("Frontend Static Serving & Security Boundaries", () => {
   });
 
   it("all frontend HTML pages should comply with Helmet CSP (no inline scripts or onclick)", async () => {
-    const pages = ["/", "/login", "/register", "/services", "/usage", "/billing", "/budgets", "/team"];
+    const pages = ["/", "/login", "/register", "/services", "/usage", "/billing", "/budgets", "/team", "/accept-invite"];
     for (const page of pages) {
       const res = await request(app).get(page);
       assert.equal(res.status, 200);
@@ -1005,7 +1013,7 @@ describe("Frontend Static Serving & Security Boundaries", () => {
   });
 
   it("all frontend JS modules should have zero unsafe innerHTML, outerHTML, window.alert, or window.confirm", async () => {
-    const modules = ["api.js", "auth.js", "dashboard.js", "services.js", "usage.js", "billing.js", "budgets.js", "team.js"];
+    const modules = ["api.js", "auth.js", "dashboard.js", "services.js", "usage.js", "billing.js", "budgets.js", "team.js", "accept-invite.js"];
     for (const mod of modules) {
       const res = await request(app).get(`/js/${mod}`);
       assert.equal(res.status, 200, `Failed fetching /js/${mod}`);

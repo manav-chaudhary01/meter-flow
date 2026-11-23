@@ -243,10 +243,13 @@
         const isAuthPage =
           currentPath.endsWith("login.html") ||
           currentPath.endsWith("register.html") ||
+          currentPath.endsWith("accept-invite.html") ||
           currentPath.endsWith("/login") ||
           currentPath.endsWith("/register") ||
+          currentPath.endsWith("/accept-invite") ||
           currentPath === "/login" ||
-          currentPath === "/register";
+          currentPath === "/register" ||
+          currentPath === "/accept-invite";
 
         if (!isAuthPage && !isAuthEndpoint) {
           this.clearSession();

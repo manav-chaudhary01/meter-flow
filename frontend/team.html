@@ -123,8 +123,8 @@
             <p>Manage team members, roles, and collaborative access for your organization workspace.</p>
           </div>
           <div style="display: flex; gap: var(--space-sm); align-items: center;">
-            <button id="open-invite-modal-btn" class="btn btn-primary" aria-label="Add existing team member">
-              + Add Member
+            <button id="open-invite-modal-btn" class="btn btn-primary" aria-label="Invite new team member">
+              + Invite Member
             </button>
             <button type="button" id="open-transfer-ownership-btn" class="btn btn-secondary" style="display: none;" aria-label="Transfer workspace ownership">
               Transfer Ownership
@@ -197,6 +197,35 @@
             <p>No team members found in this workspace.</p>
           </div>
         </div>
+
+        <!-- Pending Invitations Section (P3.3) -->
+        <div class="card" id="pending-invitations-card" style="margin-top: var(--space-xl);">
+          <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+            <h3>Pending Invitations</h3>
+            <span id="invitations-count-badge" class="badge badge-neutral">0 pending</span>
+          </div>
+          <div class="table-responsive" tabindex="0" role="region" aria-label="Pending invitations table container">
+            <table class="data-table" id="invitations-table" aria-label="Pending invitations roster">
+              <thead>
+                <tr>
+                  <th scope="col">Invitee Email</th>
+                  <th scope="col">Role</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Invited By</th>
+                  <th scope="col">Expires</th>
+                  <th scope="col" style="text-align: right;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="invitations-table-body">
+                <!-- Dynamically populated via team.js -->
+              </tbody>
+            </table>
+          </div>
+
+          <div id="invitations-empty-state" class="empty-state" style="display: none;">
+            <p>No pending invitations for this workspace.</p>
+          </div>
+        </div>
       </main>
     </div>
   </div>
@@ -260,11 +289,11 @@
     </div>
   </div>
 
-  <!-- Add Member Modal -->
+  <!-- Invite Member Modal -->
   <div id="invite-member-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="invite-member-title">
     <div class="modal-dialog">
       <div class="modal-header">
-        <h3 id="invite-member-title">Add Workspace Member</h3>
+        <h3 id="invite-member-title">Invite Workspace Member</h3>
         <button type="button" class="modal-close-btn" data-close-modal="invite-member-modal" aria-label="Close dialog">&times;</button>
       </div>
       <form id="invite-member-form" novalidate>
@@ -274,22 +303,43 @@
           <div class="form-group">
             <label for="invite-member-email" class="form-label">Member Email *</label>
             <input type="email" id="invite-member-email" class="form-input" required placeholder="colleague@example.com">
-            <span class="form-hint">Enter the email address of an existing MeterFlow user. They will immediately gain access to this workspace according to the selected role.</span>
+            <span class="form-hint">Enter the email address of the person you wish to invite. They will receive a pending invitation to join this workspace.</span>
           </div>
 
           <div class="form-group">
             <label for="invite-member-role" class="form-label">Workspace Role *</label>
             <select id="invite-member-role" class="form-select" required>
               <option value="member" selected>Member (View resources, usage, invoices &amp; budgets)</option>
-              <option value="admin">Admin (Manage services, budgets &amp; add/remove members)</option>
+              <option value="admin">Admin (Manage services, budgets &amp; invite/remove members)</option>
             </select>
           </div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-close-modal="invite-member-modal">Cancel</button>
-          <button type="submit" id="invite-member-submit-btn" class="btn btn-primary">Add Member</button>
+          <button type="submit" id="invite-member-submit-btn" class="btn btn-primary">Send Invitation</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- Cancel Invitation Confirmation Modal -->
+  <div id="cancel-invitation-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="cancel-invitation-title">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 id="cancel-invitation-title">Cancel Invitation</h3>
+        <button type="button" class="modal-close-btn" data-close-modal="cancel-invitation-modal" aria-label="Close dialog">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="cancel-invitation-error" class="alert alert-error" style="display: none;" role="alert"></div>
+        <p>Are you sure you want to cancel the pending invitation for <strong id="cancel-invitation-email"></strong>?</p>
+        <p class="text-muted" style="font-size: 0.85rem; margin-top: var(--space-sm);">
+          The recipient will no longer be able to use their invitation link to join this workspace.
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-close-modal="cancel-invitation-modal">Keep Invitation</button>
+        <button type="button" id="cancel-invitation-confirm-btn" class="btn btn-danger">Cancel Invitation</button>
+      </div>
     </div>
   </div>
 

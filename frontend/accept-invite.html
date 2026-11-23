@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Workspace Invitation — MeterFlow</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+  <div class="auth-wrapper">
+    <div class="auth-header">
+      <div class="auth-logo">
+        <div class="auth-logo-icon" aria-hidden="true">M</div>
+        <span>MeterFlow</span>
+      </div>
+      <p>Multi-Tenant SaaS Metered Billing Platform</p>
+    </div>
+
+    <main id="main-content" class="auth-card" tabindex="-1">
+      <h2 id="invite-heading">Workspace Invitation</h2>
+      <p id="invite-subtitle" class="subtitle">You have been invited to collaborate on a MeterFlow workspace</p>
+
+      <!-- Alert Banners -->
+      <div id="invite-error-banner" class="alert alert-error" style="display: none;" role="alert"></div>
+      <div id="invite-success-banner" class="alert alert-success" style="display: none;" role="status"></div>
+      <div id="invite-warning-banner" class="alert alert-warning" style="display: none;" role="status"></div>
+
+      <!-- Loading State -->
+      <div id="invite-loading" style="text-align: center; padding: var(--space-lg) 0;">
+        <span class="btn-spinner" style="display: inline-block; width: 24px; height: 24px;"></span>
+        <p style="margin-top: var(--space-sm); color: var(--color-text-muted);">Loading invitation details...</p>
+      </div>
+
+      <!-- Invitation Details Container -->
+      <div id="invite-details-container" style="display: none; margin-top: var(--space-md);">
+        <div style="background-color: var(--color-bg-secondary); border-radius: var(--radius-md); padding: var(--space-md); margin-bottom: var(--space-lg);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-sm);">
+            <span style="font-size: 0.85rem; color: var(--color-text-muted);">Workspace:</span>
+            <strong id="invite-workspace-name" style="font-size: 1.1rem;">...</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-sm);">
+            <span style="font-size: 0.85rem; color: var(--color-text-muted);">Invited Email:</span>
+            <span id="invite-email" style="font-weight: 500;">...</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-sm);">
+            <span style="font-size: 0.85rem; color: var(--color-text-muted);">Invited Role:</span>
+            <span id="invite-role-badge" class="badge badge-neutral">...</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-sm);">
+            <span style="font-size: 0.85rem; color: var(--color-text-muted);">Invited By:</span>
+            <span id="invite-invited-by">...</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-size: 0.85rem; color: var(--color-text-muted);">Expires:</span>
+            <span id="invite-expires">...</span>
+          </div>
+        </div>
+
+        <!-- Action Section 1: Authenticated & Matching User -->
+        <div id="invite-actions-authenticated" style="display: none; flex-direction: column; gap: var(--space-sm);">
+          <button type="button" id="accept-invite-btn" class="btn btn-primary" style="width: 100%;">
+            Accept Invitation
+          </button>
+          <button type="button" id="decline-invite-btn" class="btn btn-secondary" style="width: 100%;">
+            Decline
+          </button>
+        </div>
+
+        <!-- Action Section 2: Unauthenticated -->
+        <div id="invite-actions-unauthenticated" style="display: none; text-align: center;">
+          <p style="margin-bottom: var(--space-md); color: var(--color-text-muted); font-size: 0.9rem;">
+            Please sign in or create an account with the invited email to accept this invitation.
+          </p>
+          <div style="display: flex; gap: var(--space-sm);">
+            <a id="invite-login-link" href="login.html" class="btn btn-primary" style="flex: 1; text-align: center; text-decoration: none;">Sign In</a>
+            <a id="invite-register-link" href="register.html" class="btn btn-secondary" style="flex: 1; text-align: center; text-decoration: none;">Register</a>
+          </div>
+        </div>
+
+        <!-- Action Section 3: Mismatched Account -->
+        <div id="invite-actions-mismatched" style="display: none;">
+          <p style="margin-bottom: var(--space-md); color: var(--color-text-muted); font-size: 0.9rem;">
+            You are signed in as <strong id="mismatched-user-email"></strong>, but this invitation was sent to <strong id="mismatched-invited-email"></strong>.
+          </p>
+          <button type="button" id="switch-account-btn" class="btn btn-secondary" style="width: 100%;">
+            Sign Out &amp; Switch Account
+          </button>
+        </div>
+
+        <!-- Action Section 4: Terminal Status (Accepted/Declined/Expired/Cancelled) -->
+        <div id="invite-actions-terminal" style="display: none; text-align: center;">
+          <a href="index.html" class="btn btn-primary" style="width: 100%; text-decoration: none; display: inline-block;">
+            Go to Dashboard
+          </a>
+        </div>
+      </div>
+
+      <footer class="auth-footer" style="margin-top: var(--space-lg);">
+        MeterFlow Multi-Tenant SaaS &copy; 2026
+      </footer>
+    </main>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/accept-invite.js"></script>
+</body>
+</html>

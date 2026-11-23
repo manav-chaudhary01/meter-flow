@@ -347,8 +347,14 @@ export async function getWorkspaceMembers(req, res) {
   }
 }
 
+/**
+ * Adds a member directly to an organization workspace.
+ * @deprecated Deprecated in P3.3 in favor of the invitation lifecycle (POST /api/workspaces/:id/invitations).
+ * Maintained with deprecation header for backward compatibility and test fixtures.
+ */
 export async function addWorkspaceMember(req, res) {
   try {
+    res.setHeader("Deprecation", "true");
     const { id: workspaceId } = req.params;
     const { email, role } = req.body;
 

@@ -11,6 +11,7 @@ import serviceRoutes from "./routes/serviceRoutes.js";
 import usageRoutes from "./routes/usageRoutes.js";
 import billingRoutes from "./routes/billingRoutes.js";
 import budgetRoutes from "./routes/budgetRoutes.js";
+import invitationRoutes from "./routes/invitationRoutes.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -111,6 +112,7 @@ app.use("/api/services", serviceRoutes);
 app.use("/api/usage", usageRoutes);
 app.use("/api/billing", billingRoutes);
 app.use("/api/budgets", budgetRoutes);
+app.use("/api/invitations", invitationRoutes);
 
 // Explicit 404 handler for undefined API routes
 app.use("/api", (req, res) => {
@@ -147,6 +149,9 @@ app.get("/budgets", (req, res) => {
 });
 app.get("/team", (req, res) => {
   res.sendFile(path.join(frontendDir, "team.html"));
+});
+app.get("/accept-invite", (req, res) => {
+  res.sendFile(path.join(frontendDir, "accept-invite.html"));
 });
 
 // 404 handler for undefined non-API endpoints
