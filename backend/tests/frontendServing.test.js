@@ -547,6 +547,12 @@ describe("Frontend Static Serving & Security Boundaries", () => {
     assert.match(res.text, /id="details-modal"/);
     assert.match(res.text, /id="usage-modal"/);
     assert.match(res.text, /id="details-view-usage-btn"/);
+    assert.match(res.text, /id="finalize-invoice-modal"/);
+    assert.match(res.text, /id="void-invoice-modal"/);
+    assert.match(res.text, /id="finalize-invoice-confirm-btn"/);
+    assert.match(res.text, /id="void-invoice-confirm-btn"/);
+    assert.match(res.text, /id="details-finalize-btn"/);
+    assert.match(res.text, /id="details-void-btn"/);
   });
 
   it("GET /js/billing.js should serve the billing controller with safe DOM & valid pure helpers", async () => {
@@ -557,6 +563,8 @@ describe("Frontend Static Serving & Security Boundaries", () => {
     assert.match(res.text, /renderBillingTable/);
     assert.match(res.text, /openDetailsModal/);
     assert.match(res.text, /openReconciledUsageModal/);
+    assert.match(res.text, /openFinalizeModal/);
+    assert.match(res.text, /openVoidModal/);
     assert.doesNotMatch(res.text, /\.innerHTML\s*=/);
     assert.doesNotMatch(res.text, /\bwindow\.confirm\s*\(/);
     assert.doesNotMatch(res.text, /\bwindow\.alert\s*\(/);
@@ -572,6 +580,29 @@ describe("Frontend Static Serving & Security Boundaries", () => {
     assert.equal(helpers.canGenerateBilling("admin"), true);
     assert.equal(helpers.canGenerateBilling("member"), false);
     assert.equal(helpers.canGenerateBilling("viewer"), false);
+
+    assert.equal(helpers.canManageInvoiceLifecycle("owner"), true);
+    assert.equal(helpers.canManageInvoiceLifecycle("admin"), true);
+    assert.equal(helpers.canManageInvoiceLifecycle("member"), false);
+
+    assert.equal(helpers.canFinalizeInvoice("issued", "owner"), true);
+    assert.equal(helpers.canFinalizeInvoice("issued", "admin"), true);
+    assert.equal(helpers.canFinalizeInvoice("draft", "owner"), true);
+    assert.equal(helpers.canFinalizeInvoice("issued", "member"), false);
+    assert.equal(helpers.canFinalizeInvoice("finalized", "owner"), false);
+    assert.equal(helpers.canFinalizeInvoice("void", "owner"), false);
+
+    assert.equal(helpers.canVoidInvoice("issued", "owner"), true);
+    assert.equal(helpers.canVoidInvoice("issued", "admin"), true);
+    assert.equal(helpers.canVoidInvoice("draft", "owner"), true);
+    assert.equal(helpers.canVoidInvoice("issued", "member"), false);
+    assert.equal(helpers.canVoidInvoice("finalized", "owner"), false);
+    assert.equal(helpers.canVoidInvoice("void", "owner"), false);
+
+    assert.equal(helpers.isInvoiceTerminal("finalized"), true);
+    assert.equal(helpers.isInvoiceTerminal("void"), true);
+    assert.equal(helpers.isInvoiceTerminal("issued"), false);
+    assert.equal(helpers.isInvoiceTerminal("draft"), false);
 
     // 2. Monetary & date formatting
     assert.equal(helpers.formatCurrency("1250.50", "USD"), "USD 1,250.50");

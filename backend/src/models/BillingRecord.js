@@ -101,6 +101,24 @@ const billingRecordSchema = new mongoose.Schema(
       required: true,
       index: true
     },
+    finalizedAt: {
+      type: Date,
+      default: null
+    },
+    finalizedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null
+    },
+    voidedAt: {
+      type: Date,
+      default: null
+    },
+    voidedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null
+    },
     generatedAt: {
       type: Date,
       default: Date.now,

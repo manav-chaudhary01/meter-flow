@@ -317,6 +317,8 @@
         </div>
       </div>
       <div class="modal-footer">
+        <button type="button" id="details-finalize-btn" class="btn btn-primary" style="display: none;">Finalize</button>
+        <button type="button" id="details-void-btn" class="btn btn-danger" style="display: none;">Void</button>
         <button type="button" id="details-view-usage-btn" class="btn btn-secondary">Audit Reconciled Usage</button>
         <button type="button" class="btn btn-secondary" data-close-modal="details-modal">Close</button>
       </div>
@@ -414,6 +416,64 @@
           <button type="submit" id="rename-workspace-submit-btn" class="btn btn-primary">Save Changes</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- Finalize Invoice Modal -->
+  <div id="finalize-invoice-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="finalize-invoice-title">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 id="finalize-invoice-title">Finalize Invoice</h3>
+        <button type="button" class="modal-close-btn" data-close-modal="finalize-invoice-modal" aria-label="Close dialog">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="finalize-invoice-error" class="alert alert-error" style="display: none;" role="alert"></div>
+
+        <div class="alert alert-warning" style="margin-bottom: var(--space-md);">
+          <strong>Warning:</strong> Finalizing an invoice makes it permanently immutable.
+        </div>
+
+        <p style="margin-bottom: var(--space-md); color: var(--color-text-main);">
+          Are you sure you want to finalize invoice <strong id="finalize-invoice-number" style="font-family: var(--font-mono);"></strong>?
+        </p>
+
+        <p style="font-size: 0.85rem; color: var(--color-text-muted); margin-bottom: 0;">
+          Once finalized, monetary amounts, line items, and reconciled usage cannot be changed or recalculated. Late-arriving usage for this period will automatically be caught up in subsequent billing cycles.
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-close-modal="finalize-invoice-modal">Cancel</button>
+        <button type="button" id="finalize-invoice-confirm-btn" class="btn btn-primary">Confirm Finalize</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Void Invoice Modal -->
+  <div id="void-invoice-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="void-invoice-title">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 id="void-invoice-title">Void Invoice</h3>
+        <button type="button" class="modal-close-btn" data-close-modal="void-invoice-modal" aria-label="Close dialog">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="void-invoice-error" class="alert alert-error" style="display: none;" role="alert"></div>
+
+        <div class="alert alert-danger" style="margin-bottom: var(--space-md);">
+          <strong>Caution:</strong> Voiding an invoice permanently invalidates it for billing purposes.
+        </div>
+
+        <p style="margin-bottom: var(--space-md); color: var(--color-text-main);">
+          Are you sure you want to void invoice <strong id="void-invoice-number" style="font-family: var(--font-mono);"></strong>?
+        </p>
+
+        <p style="font-size: 0.85rem; color: var(--color-text-muted); margin-bottom: 0;">
+          Void invoices are permanently excluded from budget spend calculations. Historical invoice records and line items will be preserved for audit compliance. This action cannot be undone.
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-close-modal="void-invoice-modal">Cancel</button>
+        <button type="button" id="void-invoice-confirm-btn" class="btn btn-danger">Confirm Void</button>
+      </div>
     </div>
   </div>
 

@@ -86,6 +86,10 @@ function formatBillingRecord(record) {
     subtotal: doc.subtotal ? (doc.subtotal.$numberDecimal || doc.subtotal.toString()) : "0.00",
     total: doc.total ? (doc.total.$numberDecimal || doc.total.toString()) : "0.00",
     status: doc.status,
+    finalizedAt: doc.finalizedAt || null,
+    finalizedBy: doc.finalizedBy || null,
+    voidedAt: doc.voidedAt || null,
+    voidedBy: doc.voidedBy || null,
     generatedAt: doc.generatedAt,
     createdAt: doc.createdAt,
     updatedAt: doc.updatedAt
@@ -145,8 +149,11 @@ export async function generateBill(req, res) {
     });
 
     if (existingBill) {
-      // Self-healing: ensure any usage records from an interrupted previous run are linked
-      await reconcileMissingUsageRecords(existingBill);
+      // Self-healing: ensure any usage records from an interrupted previous run are linked.
+      // Finalized or void bills must NEVER be mutated or have usage linked to them.
+      if (existingBill.status === "issued" || existingBill.status === "draft") {
+        await reconcileMissingUsageRecords(existingBill);
+      }
 
       return res.status(200).json({
         success: true,
@@ -404,7 +411,9 @@ export async function getBillingUsage(req, res) {
       .populate("serviceId", "name unit trackingType currency");
 
     // Self-healing check: if count is 0 but bill has usage charges, reconcile and query again
+    // Finalized or void bills must NEVER be mutated or have usage linked to them.
     if (
+      (record.status === "issued" || record.status === "draft") &&
       usageRecords.length === 0 &&
       (record.lineItems || []).some(
         (li) => li.chargeType === "usage" && (li.usageRecordCount > 0 || (li.quantity && li.quantity !== "0"))
@@ -446,6 +455,185 @@ export async function getBillingUsage(req, res) {
     return res.status(500).json({
       success: false,
       message: "Failed to fetch usage for billing record"
+    });
+  }
+}
+
+/**
+ * Finalize an invoice: transitions status from issued/draft to finalized.
+ * Atomic and idempotent.
+ * Once finalized, monetary values, line items, and usage records cannot be mutated.
+ * If already finalized, returns 200 with alreadyFinalized: true.
+ * If void, returns 409 Conflict.
+ */
+export async function finalizeInvoice(req, res) {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid billing record ID"
+      });
+    }
+
+    // Attempt atomic update from active statuses (issued or draft) to finalized
+    const updated = await BillingRecord.findOneAndUpdate(
+      {
+        _id: id,
+        tenantId: req.user.tenantId,
+        status: { $in: ["issued", "draft"] }
+      },
+      {
+        $set: {
+          status: "finalized",
+          finalizedAt: new Date(),
+          finalizedBy: req.user.userId
+        }
+      },
+      { returnDocument: "after" }
+    );
+
+    if (updated) {
+      return res.status(200).json({
+        success: true,
+        message: "Invoice finalized successfully",
+        data: {
+          billingRecord: formatBillingRecord(updated)
+        }
+      });
+    }
+
+    // Inspect existing record to determine deterministic response
+    const existing = await BillingRecord.findOne({
+      _id: id,
+      tenantId: req.user.tenantId
+    });
+
+    if (!existing) {
+      return res.status(404).json({
+        success: false,
+        message: "Billing record not found"
+      });
+    }
+
+    if (existing.status === "finalized") {
+      return res.status(200).json({
+        success: true,
+        message: "Invoice is already finalized",
+        data: {
+          billingRecord: formatBillingRecord(existing),
+          alreadyFinalized: true
+        }
+      });
+    }
+
+    if (existing.status === "void") {
+      return res.status(409).json({
+        success: false,
+        message: "Cannot finalize a void invoice"
+      });
+    }
+
+    return res.status(400).json({
+      success: false,
+      message: `Cannot finalize invoice in status '${existing.status}'`
+    });
+  } catch (error) {
+    console.error("Finalize invoice error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to finalize invoice"
+    });
+  }
+}
+
+/**
+ * Void an invoice: transitions status from issued/draft to void.
+ * Atomic and idempotent.
+ * Void invoices are never physically deleted and retain all historical details.
+ * Excluded from budget spend calculations.
+ * If already void, returns 200 with alreadyVoid: true.
+ * If finalized, returns 409 Conflict.
+ */
+export async function voidInvoice(req, res) {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid billing record ID"
+      });
+    }
+
+    // Attempt atomic update from active statuses (issued or draft) to void
+    const updated = await BillingRecord.findOneAndUpdate(
+      {
+        _id: id,
+        tenantId: req.user.tenantId,
+        status: { $in: ["issued", "draft"] }
+      },
+      {
+        $set: {
+          status: "void",
+          voidedAt: new Date(),
+          voidedBy: req.user.userId
+        }
+      },
+      { returnDocument: "after" }
+    );
+
+    if (updated) {
+      return res.status(200).json({
+        success: true,
+        message: "Invoice voided successfully",
+        data: {
+          billingRecord: formatBillingRecord(updated)
+        }
+      });
+    }
+
+    // Inspect existing record to determine deterministic response
+    const existing = await BillingRecord.findOne({
+      _id: id,
+      tenantId: req.user.tenantId
+    });
+
+    if (!existing) {
+      return res.status(404).json({
+        success: false,
+        message: "Billing record not found"
+      });
+    }
+
+    if (existing.status === "void") {
+      return res.status(200).json({
+        success: true,
+        message: "Invoice is already void",
+        data: {
+          billingRecord: formatBillingRecord(existing),
+          alreadyVoid: true
+        }
+      });
+    }
+
+    if (existing.status === "finalized") {
+      return res.status(409).json({
+        success: false,
+        message: "Cannot void a finalized invoice"
+      });
+    }
+
+    return res.status(400).json({
+      success: false,
+      message: `Cannot void invoice in status '${existing.status}'`
+    });
+  } catch (error) {
+    console.error("Void invoice error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to void invoice"
     });
   }
 }

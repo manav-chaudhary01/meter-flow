@@ -18,6 +18,28 @@
     return r === "owner" || r === "admin";
   }
 
+  function canManageInvoiceLifecycle(role) {
+    const r = stringOrEmpty(role).trim().toLowerCase();
+    return r === "owner" || r === "admin";
+  }
+
+  function canFinalizeInvoice(status, role) {
+    if (!canManageInvoiceLifecycle(role)) return false;
+    const s = stringOrEmpty(status).trim().toLowerCase();
+    return s === "issued" || s === "draft";
+  }
+
+  function canVoidInvoice(status, role) {
+    if (!canManageInvoiceLifecycle(role)) return false;
+    const s = stringOrEmpty(status).trim().toLowerCase();
+    return s === "issued" || s === "draft";
+  }
+
+  function isInvoiceTerminal(status) {
+    const s = stringOrEmpty(status).trim().toLowerCase();
+    return s === "finalized" || s === "void";
+  }
+
   function formatCurrency(amount, currency = "USD") {
     if (amount === null || amount === undefined || amount === "") {
       return `${currency} 0.00`;
@@ -149,6 +171,10 @@
   // Expose pure helpers on window
   window.MeterFlowBilling = {
     canGenerateBilling,
+    canManageInvoiceLifecycle,
+    canFinalizeInvoice,
+    canVoidInvoice,
+    isInvoiceTerminal,
     formatCurrency,
     formatDateTime,
     formatDateOnly,
@@ -174,6 +200,8 @@
   let totalPages = 1;
   let cachedBills = [];
   let currentlyViewedBillId = null;
+  let pendingFinalizeBill = null;
+  let pendingVoidBill = null;
   let lastFocusedElement = null;
 
   document.addEventListener("DOMContentLoaded", initBillingPage);
@@ -317,7 +345,11 @@
             // Close any open modals
             closeModal("generate-modal");
             closeModal("invoice-details-modal");
+            closeModal("details-modal");
             closeModal("reconciled-usage-modal");
+            closeModal("usage-modal");
+            closeModal("finalize-invoice-modal");
+            closeModal("void-invoice-modal");
 
             // Reset filters
             const filterStatus = document.getElementById("filter-billing-status");
@@ -410,7 +442,11 @@
     const genModal = document.getElementById("generate-modal");
     const detailsModal = document.getElementById("details-modal");
     const usageModal = document.getElementById("usage-modal");
+    const finalizeModal = document.getElementById("finalize-invoice-modal");
+    const voidModal = document.getElementById("void-invoice-modal");
     const detailsViewUsageBtn = document.getElementById("details-view-usage-btn");
+    const finalizeConfirmBtn = document.getElementById("finalize-invoice-confirm-btn");
+    const voidConfirmBtn = document.getElementById("void-invoice-confirm-btn");
 
     if (openBtn && genModal) {
       openBtn.addEventListener("click", () => {
@@ -447,6 +483,86 @@
       });
     }
 
+    if (finalizeConfirmBtn) {
+      finalizeConfirmBtn.addEventListener("click", async () => {
+        if (!pendingFinalizeBill || !pendingFinalizeBill.id) return;
+        const errorEl = document.getElementById("finalize-invoice-error");
+        if (errorEl) {
+          errorEl.textContent = "";
+          errorEl.style.display = "none";
+        }
+
+        finalizeConfirmBtn.disabled = true;
+        finalizeConfirmBtn.textContent = "Finalizing...";
+
+        try {
+          const res = await api.patch(`/api/billing/${pendingFinalizeBill.id}/finalize`);
+          if (res.success) {
+            closeModal("finalize-invoice-modal");
+            closeModal("details-modal");
+            showGlobalSuccess(
+              res.message || `Invoice ${pendingFinalizeBill.invoiceNumber} finalized successfully.`
+            );
+            pendingFinalizeBill = null;
+            await loadBillingRecords(currentPage);
+          } else {
+            if (errorEl) {
+              errorEl.textContent = res.message || "Failed to finalize invoice";
+              errorEl.style.display = "block";
+            }
+          }
+        } catch (err) {
+          if (errorEl) {
+            errorEl.textContent = err.message || "Failed to finalize invoice";
+            errorEl.style.display = "block";
+          }
+        } finally {
+          finalizeConfirmBtn.disabled = false;
+          finalizeConfirmBtn.textContent = "Confirm Finalize";
+        }
+      });
+    }
+
+    if (voidConfirmBtn) {
+      voidConfirmBtn.addEventListener("click", async () => {
+        if (!pendingVoidBill || !pendingVoidBill.id) return;
+        const errorEl = document.getElementById("void-invoice-error");
+        if (errorEl) {
+          errorEl.textContent = "";
+          errorEl.style.display = "none";
+        }
+
+        voidConfirmBtn.disabled = true;
+        voidConfirmBtn.textContent = "Voiding...";
+
+        try {
+          const res = await api.patch(`/api/billing/${pendingVoidBill.id}/void`);
+          if (res.success) {
+            closeModal("void-invoice-modal");
+            closeModal("details-modal");
+            showGlobalSuccess(
+              res.message || `Invoice ${pendingVoidBill.invoiceNumber} voided successfully.`
+            );
+            pendingVoidBill = null;
+            await loadBillingRecords(currentPage);
+          } else {
+            if (errorEl) {
+              errorEl.textContent = res.message || "Failed to void invoice";
+              errorEl.style.display = "block";
+            }
+          }
+        } catch (err) {
+          if (errorEl) {
+            errorEl.textContent = err.message || "Failed to void invoice";
+            errorEl.style.display = "block";
+          }
+        } finally {
+          voidConfirmBtn.disabled = false;
+          voidConfirmBtn.textContent = "Confirm Void";
+        }
+      });
+    }
+
     document.querySelectorAll("[data-close-modal]").forEach((btn) => {
       btn.addEventListener("click", () => {
         const modalId = btn.getAttribute("data-close-modal");
@@ -454,7 +570,7 @@
       });
     });
 
-    [genModal, detailsModal, usageModal].forEach((modal) => {
+    [genModal, detailsModal, usageModal, finalizeModal, voidModal].forEach((modal) => {
       if (modal) {
         modal.addEventListener("click", (e) => {
           if (e.target === modal) closeModal(modal.id);
@@ -846,6 +962,29 @@
       tdActions.style.textAlign = "right";
       tdActions.style.whiteSpace = "nowrap";
 
+      if (canFinalizeInvoice(bill.status, currentWorkspaceRole)) {
+        const finalizeBtn = document.createElement("button");
+        finalizeBtn.className = "btn btn-secondary btn-sm action-finalize-invoice";
+        finalizeBtn.setAttribute("data-id", bill.id);
+        finalizeBtn.setAttribute("aria-label", `Finalize invoice ${bill.invoiceNumber}`);
+        finalizeBtn.style.marginRight = "6px";
+        finalizeBtn.textContent = "Finalize";
+        finalizeBtn.addEventListener("click", () => openFinalizeModal(bill));
+        tdActions.appendChild(finalizeBtn);
+      }
+
+      if (canVoidInvoice(bill.status, currentWorkspaceRole)) {
+        const voidBtn = document.createElement("button");
+        voidBtn.className = "btn btn-secondary btn-sm action-void-invoice";
+        voidBtn.setAttribute("data-id", bill.id);
+        voidBtn.setAttribute("aria-label", `Void invoice ${bill.invoiceNumber}`);
+        voidBtn.style.marginRight = "6px";
+        voidBtn.style.color = "var(--color-danger)";
+        voidBtn.textContent = "Void";
+        voidBtn.addEventListener("click", () => openVoidModal(bill));
+        tdActions.appendChild(voidBtn);
+      }
+
       const detailsBtn = document.createElement("button");
       detailsBtn.className = "btn btn-secondary btn-sm action-view-details";
       detailsBtn.setAttribute("data-id", bill.id);
@@ -864,6 +1003,32 @@
       tr.appendChild(tdActions);
       tableBody.appendChild(tr);
     });
+  }
+
+  function openFinalizeModal(bill) {
+    if (!bill) return;
+    pendingFinalizeBill = bill;
+    const numEl = document.getElementById("finalize-invoice-number");
+    const errorEl = document.getElementById("finalize-invoice-error");
+    if (numEl) numEl.textContent = bill.invoiceNumber;
+    if (errorEl) {
+      errorEl.textContent = "";
+      errorEl.style.display = "none";
+    }
+    openModal("finalize-invoice-modal", document.getElementById("finalize-invoice-confirm-btn"));
+  }
+
+  function openVoidModal(bill) {
+    if (!bill) return;
+    pendingVoidBill = bill;
+    const numEl = document.getElementById("void-invoice-number");
+    const errorEl = document.getElementById("void-invoice-error");
+    if (numEl) numEl.textContent = bill.invoiceNumber;
+    if (errorEl) {
+      errorEl.textContent = "";
+      errorEl.style.display = "none";
+    }
+    openModal("void-invoice-modal", document.getElementById("void-invoice-confirm-btn"));
   }
 
   // --- Safe DOM Rendering for Details Modal ---
@@ -996,6 +1161,35 @@
 
     if (subtotalEl) subtotalEl.textContent = formatCurrency(bill.subtotal, bill.currency);
     if (totalEl) totalEl.textContent = formatCurrency(bill.total, bill.currency);
+
+    const detailsFinalizeBtn = document.getElementById("details-finalize-btn");
+    const detailsVoidBtn = document.getElementById("details-void-btn");
+
+    if (detailsFinalizeBtn) {
+      if (canFinalizeInvoice(bill.status, currentWorkspaceRole)) {
+        detailsFinalizeBtn.style.display = "inline-block";
+        detailsFinalizeBtn.onclick = () => {
+          closeModal("details-modal");
+          openFinalizeModal(bill);
+        };
+      } else {
+        detailsFinalizeBtn.style.display = "none";
+        detailsFinalizeBtn.onclick = null;
+      }
+    }
+
+    if (detailsVoidBtn) {
+      if (canVoidInvoice(bill.status, currentWorkspaceRole)) {
+        detailsVoidBtn.style.display = "inline-block";
+        detailsVoidBtn.onclick = () => {
+          closeModal("details-modal");
+          openVoidModal(bill);
+        };
+      } else {
+        detailsVoidBtn.style.display = "none";
+        detailsVoidBtn.onclick = null;
+      }
+    }
 
     openModal("details-modal", modal?.querySelector("button[data-close-modal]"));
   }
